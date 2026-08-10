@@ -115,6 +115,25 @@ export interface Strings {
     deleteLocalSettings: string
     deleteLocalSettingsHint: string
     deleteLocalSettingsConfirm: string
+    batchTitle: string
+    batchHelper: string
+    batchAddMore: string
+    batchClearAll: string
+    batchClearAllConfirm: string
+    batchRemoveOne: string
+    batchStatusIdle: string
+    batchStatusQueued: string
+    batchStatusProcessing: string
+    batchStatusDone: string
+    batchStatusError: string
+    batchProtectAll: string
+    batchProtectAllProgress: (done: number, total: number) => string
+    batchDownloadOne: string
+    batchDownloadZip: string
+    batchZipFilename: string
+    batchTotalSize: (kb: string) => string
+    batchNoRedactionNote: string
+    batchCount: (n: number) => string
   }
   result: {
     ready: string
@@ -295,6 +314,25 @@ export const enStrings: Strings = {
     deleteLocalSettings: 'Delete all local settings',
     deleteLocalSettingsHint: 'Wipes presets, theme, and language stored on this device. Loaded documents are already local-only.',
     deleteLocalSettingsConfirm: 'Delete every BlackLayer setting stored on this device? This cannot be undone.',
+    batchTitle: 'Batch protection',
+    batchHelper: 'Every file in this batch will get the same recipient, purpose, protection level, and patterns.',
+    batchAddMore: 'Add more files',
+    batchClearAll: 'Clear',
+    batchClearAllConfirm: 'Remove all files from the batch?',
+    batchRemoveOne: 'Remove file',
+    batchStatusIdle: 'Ready',
+    batchStatusQueued: 'Queued',
+    batchStatusProcessing: 'Working…',
+    batchStatusDone: 'Done',
+    batchStatusError: 'Error',
+    batchProtectAll: 'Protect all',
+    batchProtectAllProgress: (done, total) => `Protecting ${done + 1} of ${total}…`,
+    batchDownloadOne: 'Download',
+    batchDownloadZip: 'Download all as .zip',
+    batchZipFilename: 'blacklayer-batch.zip',
+    batchTotalSize: (kb) => `Total: ${kb} KB`,
+    batchNoRedactionNote: 'Manual hiding is per-document and not available in batch mode. Protect files individually if you need to hide specific areas.',
+    batchCount: (n) => `${n} file${n === 1 ? '' : 's'} ready`,
   },
   result: {
     ready: 'Your protected copy is ready',
@@ -475,6 +513,25 @@ export const esStrings: Strings = {
     deleteLocalSettings: 'Eliminar toda la configuración local',
     deleteLocalSettingsHint: 'Elimina los ajustes, el tema y el idioma guardados en este dispositivo. Los documentos cargados ya son locales.',
     deleteLocalSettingsConfirm: '¿Eliminar toda la configuración de BlackLayer en este dispositivo? Esta acción no se puede deshacer.',
+    batchTitle: 'Protección en lote',
+    batchHelper: 'Cada archivo del lote llevará el mismo destinatario, motivo, nivel de protección y patrones.',
+    batchAddMore: 'Añadir más archivos',
+    batchClearAll: 'Vaciar',
+    batchClearAllConfirm: '¿Quitar todos los archivos del lote?',
+    batchRemoveOne: 'Quitar archivo',
+    batchStatusIdle: 'Listo',
+    batchStatusQueued: 'En cola',
+    batchStatusProcessing: 'Procesando…',
+    batchStatusDone: 'Hecho',
+    batchStatusError: 'Error',
+    batchProtectAll: 'Proteger todos',
+    batchProtectAllProgress: (done, total) => `Protegiendo ${done + 1} de ${total}…`,
+    batchDownloadOne: 'Descargar',
+    batchDownloadZip: 'Descargar todo en .zip',
+    batchZipFilename: 'blacklayer-lote.zip',
+    batchTotalSize: (kb) => `Total: ${kb} KB`,
+    batchNoRedactionNote: 'La ocultación manual se hace por documento y no está disponible en modo lote. Protege los archivos por separado si necesitas ocultar zonas específicas.',
+    batchCount: (n) => `${n} archivo${n === 1 ? '' : 's'} listo${n === 1 ? '' : 's'}`,
   },
   result: {
     ready: 'Tu copia protegida está lista',

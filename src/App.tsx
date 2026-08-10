@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
+  Archive,
   Bookmark,
   Check,
   ChevronDown,
@@ -11,6 +12,7 @@ import {
   HelpCircle,
   ImageIcon,
   Languages,
+  Loader2,
   Monitor,
   Moon,
   Plus,
@@ -61,6 +63,18 @@ type LoadedFile = {
   kind: 'pdf' | 'image'
   base: RenderedBase
   hasSignature: boolean
+}
+
+type BatchItemStatus = 'idle' | 'queued' | 'processing' | 'done' | 'error'
+
+interface BatchItem {
+  id: string
+  file: File
+  kind: 'pdf' | 'image'
+  status: BatchItemStatus
+  error?: string
+  outputBlob?: Blob
+  outputName?: string
 }
 
 const ACCEPT = 'application/pdf,image/jpeg,image/png,image/webp'
@@ -130,6 +144,9 @@ export function App(): JSX.Element {
 
   const [loading, setLoading] = useState(false)
   const [loaded, setLoaded] = useState<LoadedFile | null>(null)
+  const [batch, setBatch] = useState<BatchItem[]>([])
+  const [batchProgress, setBatchProgress] = useState<{ done: number; total: number } | null>(null)
+  const [batchZipUrl, setBatchZipUrl] = useState<string | null>(null)
   const [activePageIndex, setActivePageIndex] = useState(0)
   const [recipient, setRecipient] = useState('')
   const [purpose, setPurpose] = useState('')
@@ -245,10 +262,42 @@ export function App(): JSX.Element {
 
   const onFiles = useCallback(
     async (list: FileList | null | undefined) => {
-      const f = list?.[0]
-      if (!f) return
+      if (!list || list.length === 0) return
       setError(null)
       clearOutput()
+
+      // Multi-file drop or picker → batch mode.
+      if (list.length > 1) {
+        const items: BatchItem[] = []
+        const rejected: string[] = []
+        for (const f of Array.from(list)) {
+          const kind = detectKind(f)
+          if (!kind) {
+            rejected.push(f.name)
+            continue
+          }
+          items.push({ id: nextId(), file: f, kind, status: 'idle' })
+        }
+        if (!items.length) {
+          setError(t.errors.unsupported)
+          return
+        }
+        if (batchZipUrl) URL.revokeObjectURL(batchZipUrl)
+        setBatchZipUrl(null)
+        setBatch((prev) => {
+          // If already in batch mode, append; otherwise replace.
+          if (prev.length > 0) return [...prev, ...items]
+          return items
+        })
+        setBatchProgress(null)
+        if (rejected.length) {
+          setError(`${t.errors.unsupported} (${rejected.join(', ')})`)
+        }
+        // Do not populate `loaded` for batch mode.
+        return
+      }
+
+      const f = list[0]!
       const kind = detectKind(f)
       if (!kind) {
         setError(t.errors.unsupported)
@@ -304,6 +353,28 @@ export function App(): JSX.Element {
     },
     [t, clearOutput],
   )
+
+  const clearBatch = useCallback(() => {
+    setBatch([])
+    if (batchZipUrl) URL.revokeObjectURL(batchZipUrl)
+    setBatchZipUrl(null)
+    setBatchProgress(null)
+    setError(null)
+  }, [batchZipUrl])
+
+  const removeBatchItem = useCallback((id: string) => {
+    setBatch((prev) => {
+      const target = prev.find((it) => it.id === id)
+      if (target?.outputBlob) {
+        // no explicit revoke needed for blob-only refs
+      }
+      return prev.filter((it) => it.id !== id)
+    })
+    if (batchZipUrl) {
+      URL.revokeObjectURL(batchZipUrl)
+      setBatchZipUrl(null)
+    }
+  }, [batchZipUrl])
 
   const clearDoc = useCallback(() => {
     releaseBase(loaded?.base)
@@ -450,6 +521,85 @@ export function App(): JSX.Element {
     }
   }, [loaded, level, recipient, purpose, lang, customEnabled, customText, redactionsByPage, docSeed, crosshatchOverride, frameOverride, t, clearOutput])
 
+  const protectBatch = useCallback(async () => {
+    if (!batch.length) return
+    setError(null)
+    if (batchZipUrl) {
+      URL.revokeObjectURL(batchZipUrl)
+      setBatchZipUrl(null)
+    }
+    setBatch((prev) => prev.map((it) => ({ ...it, status: 'queued', error: undefined, outputBlob: undefined, outputName: undefined })))
+    setBatchProgress({ done: 0, total: batch.length })
+
+    // Read the current batch snapshot (state may be async).
+    const items = batch
+    for (let i = 0; i < items.length; i++) {
+      const item = items[i]!
+      setBatch((prev) => prev.map((it) => (it.id === item.id ? { ...it, status: 'processing' } : it)))
+      setBatchProgress({ done: i, total: items.length })
+
+      try {
+        // Each file gets its own random seed so batch outputs are not identical.
+        const perSeed = (await import('./core/random/seed.ts')).generateSeed()
+        const custom = customEnabled ? customText.split(/\r?\n/) : undefined
+        const profile = profileFor(
+          level,
+          buildWatermarkText(recipient, purpose, lang, custom),
+          perSeed,
+          { crosshatch: crosshatchOverride ?? undefined, frame: frameOverride ?? undefined },
+        )
+
+        let blob: Blob
+        if (item.kind === 'pdf') {
+          const buf = await item.file.arrayBuffer()
+          const { applyPdfWatermark } = await import('./core/pdf/watermark.ts')
+          const { bytes } = await applyPdfWatermark({ source: buf, profile, lang })
+          blob = new Blob([bytes as unknown as ArrayBuffer], { type: 'application/pdf' })
+        } else {
+          const outType =
+            item.file.type === 'image/jpeg'
+              ? 'image/jpeg'
+              : item.file.type === 'image/webp'
+                ? 'image/webp'
+                : 'image/png'
+          const { applyImageWatermark } = await import('./core/image/watermark.ts')
+          blob = await applyImageWatermark({ source: item.file, profile, lang, outputType: outType })
+        }
+
+        const outputName = suggestOutputName(item.file.name, item.kind)
+        setBatch((prev) =>
+          prev.map((it) =>
+            it.id === item.id ? { ...it, status: 'done', outputBlob: blob, outputName } : it,
+          ),
+        )
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        setBatch((prev) =>
+          prev.map((it) => (it.id === item.id ? { ...it, status: 'error', error: msg } : it)),
+        )
+      }
+    }
+
+    setBatchProgress(null)
+  }, [batch, batchZipUrl, level, recipient, purpose, lang, customEnabled, customText, crosshatchOverride, frameOverride])
+
+  const buildZip = useCallback(async () => {
+    const done = batch.filter((it) => it.status === 'done' && it.outputBlob)
+    if (!done.length) return
+    const { bundleZip } = await import('./core/batch/zip.ts')
+    const entries = await Promise.all(
+      done.map(async (it) => ({
+        filename: it.outputName ?? it.file.name,
+        bytes: new Uint8Array(await it.outputBlob!.arrayBuffer()),
+      })),
+    )
+    const zip = bundleZip(entries)
+    if (batchZipUrl) URL.revokeObjectURL(batchZipUrl)
+    const blob = new Blob([zip as unknown as ArrayBuffer], { type: 'application/zip' })
+    const url = URL.createObjectURL(blob)
+    setBatchZipUrl(url)
+  }, [batch, batchZipUrl])
+
   const onDrop = useCallback(
     (e: React.DragEvent<HTMLElement>) => {
       e.preventDefault()
@@ -594,7 +744,7 @@ export function App(): JSX.Element {
         />
 
         <main id="main" className="flex-1 w-full max-w-6xl mx-auto px-6 pt-6 pb-16">
-        {!loaded && !loading && (
+        {!loaded && !loading && batch.length === 0 && (
           <HeroDrop
             dragActive={dragActive}
             onDrop={onDrop}
@@ -607,6 +757,41 @@ export function App(): JSX.Element {
           />
         )}
 
+        {batch.length > 0 && !loaded && (
+          <BatchWorkspace
+            items={batch}
+            progress={batchProgress}
+            zipUrl={batchZipUrl}
+            zipFilename={t.workspace.batchZipFilename}
+            onRemove={removeBatchItem}
+            onClear={() => {
+              if (batch.length && !window.confirm(t.workspace.batchClearAllConfirm)) return
+              clearBatch()
+            }}
+            onAddMore={onFiles}
+            onProtectAll={protectBatch}
+            onBuildZip={buildZip}
+            recipient={recipient}
+            purpose={purpose}
+            level={level}
+            onLevelChange={setLevelManual}
+            onRecipient={setRecipient}
+            onPurpose={setPurpose}
+            advancedOpen={advancedOpen}
+            onToggleAdvanced={() => setAdvancedOpen((v) => !v)}
+            crosshatchOn={previewProfile.watermark.patterns.crosshatch}
+            frameOn={previewProfile.watermark.patterns.frame}
+            onCrosshatchChange={(v) => setCrosshatchOverride(v)}
+            onFrameChange={(v) => setFrameOverride(v)}
+            customEnabled={customEnabled}
+            customText={customText}
+            onToggleCustom={() => setCustomEnabled((v) => !v)}
+            onCustomText={setCustomText}
+            error={error}
+            strings={t}
+          />
+        )}
+
         {loading && (
           <div className="flex items-center justify-center py-32">
             <div className="text-sm text-muted-foreground animate-pulse">
@@ -615,7 +800,7 @@ export function App(): JSX.Element {
           </div>
         )}
 
-        {loaded && !loading && (
+        {loaded && !loading && batch.length === 0 && (
           <Workspace
             loaded={loaded}
             activePage={activePage}
@@ -993,6 +1178,7 @@ function HeroDrop({
         <input
           type="file"
           accept={ACCEPT}
+          multiple
           className="sr-only"
           onChange={(e) => onFiles(e.target.files)}
         />
@@ -1714,6 +1900,312 @@ function PageThumb({
         <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-foreground border border-background" />
       )}
     </button>
+  )
+}
+
+interface BatchWorkspaceProps {
+  items: BatchItem[]
+  progress: { done: number; total: number } | null
+  zipUrl: string | null
+  zipFilename: string
+  onRemove: (id: string) => void
+  onClear: () => void
+  onAddMore: (list: FileList | null | undefined) => void
+  onProtectAll: () => void
+  onBuildZip: () => void
+  recipient: string
+  purpose: string
+  level: ProtectionLevel
+  onLevelChange: (l: ProtectionLevel) => void
+  onRecipient: (v: string) => void
+  onPurpose: (v: string) => void
+  advancedOpen: boolean
+  onToggleAdvanced: () => void
+  crosshatchOn: boolean
+  frameOn: boolean
+  onCrosshatchChange: (v: boolean) => void
+  onFrameChange: (v: boolean) => void
+  customEnabled: boolean
+  customText: string
+  onToggleCustom: () => void
+  onCustomText: (v: string) => void
+  error: string | null
+  strings: Strings
+}
+
+function BatchWorkspace(props: BatchWorkspaceProps): JSX.Element {
+  const {
+    items,
+    progress,
+    zipUrl,
+    zipFilename,
+    onRemove,
+    onClear,
+    onAddMore,
+    onProtectAll,
+    onBuildZip,
+    recipient,
+    purpose,
+    level,
+    onLevelChange,
+    onRecipient,
+    onPurpose,
+    advancedOpen,
+    onToggleAdvanced,
+    crosshatchOn,
+    frameOn,
+    onCrosshatchChange,
+    onFrameChange,
+    customEnabled,
+    customText,
+    onToggleCustom,
+    onCustomText,
+    error,
+    strings,
+  } = props
+
+  const totalBytes = items.reduce((n, it) => n + it.file.size, 0)
+  const doneCount = items.filter((it) => it.status === 'done').length
+  const errorCount = items.filter((it) => it.status === 'error').length
+  const anyProcessing = items.some((it) => it.status === 'processing' || it.status === 'queued')
+  const canProtect = items.length > 0 && !!recipient.trim() && !!purpose.trim() && !anyProcessing
+  const canZip = doneCount > 0 && !anyProcessing
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-8 animate-fade-in">
+      <section className="min-w-0">
+        <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+          <div className="flex items-center gap-2 text-sm">
+            <Archive className="h-4 w-4 text-muted-foreground" />
+            <span className="font-medium">{strings.workspace.batchTitle}</span>
+            <span className="text-xs text-muted-foreground font-mono">
+              {strings.workspace.batchCount(items.length)} · {strings.workspace.batchTotalSize((totalBytes / 1024).toFixed(1))}
+            </span>
+          </div>
+          <div className="flex items-center gap-1">
+            <label className="inline-flex items-center gap-1 text-xs px-2.5 h-8 rounded-md border border-border hover:border-foreground/50 text-muted-foreground hover:text-foreground cursor-pointer transition-colors focus-within:ring-2 focus-within:ring-ring">
+              <Plus className="h-3.5 w-3.5" />
+              {strings.workspace.batchAddMore}
+              <input
+                type="file"
+                accept={ACCEPT}
+                multiple
+                className="sr-only"
+                onChange={(e) => onAddMore(e.target.files)}
+              />
+            </label>
+            <Button variant="ghost" size="sm" onClick={onClear}>
+              <X className="h-4 w-4" />
+              {strings.workspace.batchClearAll}
+            </Button>
+          </div>
+        </div>
+
+        <div className="rounded-xl border border-border bg-muted/30 p-2">
+          <ul className="divide-y divide-border">
+            {items.map((it) => (
+              <BatchRow
+                key={it.id}
+                item={it}
+                onRemove={() => onRemove(it.id)}
+                strings={strings}
+              />
+            ))}
+          </ul>
+        </div>
+
+        <p className="mt-3 text-xs text-muted-foreground">{strings.workspace.batchNoRedactionNote}</p>
+        {errorCount > 0 && (
+          <p className="mt-2 text-xs text-destructive">
+            {errorCount} of {items.length} failed. Check individual rows.
+          </p>
+        )}
+      </section>
+
+      <aside className="lg:sticky lg:top-20 lg:self-start space-y-5">
+        <section className="space-y-4" aria-label={strings.workspace.stepAbout}>
+          <StepHeading step={1} title={strings.workspace.stepAbout} />
+          <div className="space-y-1.5">
+            <Label htmlFor="batch-recipient">{strings.workspace.recipient}</Label>
+            <Input
+              id="batch-recipient"
+              value={recipient}
+              onChange={(e) => onRecipient(e.target.value)}
+              placeholder={strings.workspace.recipientPh}
+              autoComplete="off"
+              maxLength={80}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="batch-purpose">{strings.workspace.purpose}</Label>
+            <Input
+              id="batch-purpose"
+              value={purpose}
+              onChange={(e) => onPurpose(e.target.value)}
+              placeholder={strings.workspace.purposePh}
+              autoComplete="off"
+              maxLength={80}
+            />
+          </div>
+        </section>
+
+        <section className="space-y-2 pt-4 border-t border-border/60" aria-label={strings.workspace.stepProtection}>
+          <StepHeading step={2} title={strings.workspace.stepProtection} />
+          <LevelPicker level={level} onChange={onLevelChange} strings={strings} />
+          <p className="text-xs text-muted-foreground pt-0.5 leading-relaxed">
+            {strings.workspace.levelDescription[level]}
+          </p>
+          <p className="text-xs text-muted-foreground/80">{strings.workspace.batchHelper}</p>
+        </section>
+
+        <section className="space-y-2 pt-4 border-t border-border/60">
+          <button
+            type="button"
+            onClick={onToggleAdvanced}
+            className="flex items-center justify-between w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+            aria-expanded={advancedOpen}
+          >
+            <StepHeading step={3} title={strings.workspace.stepAdvanced} optional />
+            <ChevronDown
+              className={cn('h-4 w-4 text-muted-foreground transition-transform', advancedOpen ? 'rotate-180' : '')}
+            />
+          </button>
+          {advancedOpen && (
+            <div className="space-y-3">
+              <PatternToggle
+                label={strings.workspace.patternCrosshatchLabel}
+                hint={strings.workspace.patternCrosshatchHint}
+                checked={crosshatchOn}
+                onChange={onCrosshatchChange}
+              />
+              <PatternToggle
+                label={strings.workspace.patternFrameLabel}
+                hint={strings.workspace.patternFrameHint}
+                checked={frameOn}
+                onChange={onFrameChange}
+              />
+              <CustomTextBlock
+                enabled={customEnabled}
+                onToggle={onToggleCustom}
+                value={customText}
+                onChange={onCustomText}
+                strings={strings}
+              />
+            </div>
+          )}
+        </section>
+
+        <Button onClick={onProtectAll} disabled={!canProtect} size="lg" className="w-full">
+          {progress
+            ? strings.workspace.batchProtectAllProgress(progress.done, progress.total)
+            : strings.workspace.batchProtectAll}
+        </Button>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        {doneCount > 0 && (
+          <div className="rounded-xl border border-border bg-muted/40 p-4 space-y-3">
+            <p className="text-sm font-semibold">
+              {doneCount} / {items.length} · {strings.result.ready}
+            </p>
+            {zipUrl ? (
+              <a
+                href={zipUrl}
+                download={zipFilename}
+                className={cn(
+                  'inline-flex w-full items-center justify-center gap-2 h-10 px-4',
+                  'rounded-md bg-primary text-primary-foreground text-sm font-medium',
+                  'hover:bg-primary/90 transition-colors',
+                )}
+              >
+                <Archive className="h-4 w-4" />
+                {strings.workspace.batchDownloadZip}
+              </a>
+            ) : (
+              <Button onClick={onBuildZip} disabled={!canZip} className="w-full">
+                <Archive className="h-4 w-4" />
+                {strings.workspace.batchDownloadZip}
+              </Button>
+            )}
+            <p className="text-[11px] text-muted-foreground pt-1 border-t border-border/60">
+              {strings.result.originalNote}
+            </p>
+          </div>
+        )}
+      </aside>
+    </div>
+  )
+}
+
+function BatchRow({
+  item,
+  onRemove,
+  strings,
+}: {
+  item: BatchItem
+  onRemove: () => void
+  strings: Strings
+}): JSX.Element {
+  const sizeKb = (item.file.size / 1024).toFixed(1)
+  const statusLabel: Record<BatchItemStatus, string> = {
+    idle: strings.workspace.batchStatusIdle,
+    queued: strings.workspace.batchStatusQueued,
+    processing: strings.workspace.batchStatusProcessing,
+    done: strings.workspace.batchStatusDone,
+    error: strings.workspace.batchStatusError,
+  }
+  const statusClass: Record<BatchItemStatus, string> = {
+    idle: 'text-muted-foreground',
+    queued: 'text-muted-foreground',
+    processing: 'text-foreground',
+    done: 'text-foreground',
+    error: 'text-destructive',
+  }
+  return (
+    <li className="flex items-center gap-3 px-2 py-2.5">
+      {item.kind === 'pdf' ? (
+        <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
+      ) : (
+        <ImageIcon className="h-4 w-4 text-muted-foreground shrink-0" />
+      )}
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-medium truncate" title={item.file.name}>
+          {item.file.name}
+        </p>
+        <p className="text-[11px] text-muted-foreground font-mono">
+          {sizeKb} KB · {item.kind.toUpperCase()}
+          {item.error ? ` · ${item.error}` : ''}
+        </p>
+      </div>
+      <span className={cn('text-[11px] font-mono uppercase tracking-wider shrink-0 inline-flex items-center gap-1', statusClass[item.status])}>
+        {item.status === 'processing' && <Loader2 className="h-3 w-3 animate-spin" />}
+        {statusLabel[item.status]}
+      </span>
+      {item.status === 'done' && item.outputBlob && (
+        <a
+          href={URL.createObjectURL(item.outputBlob)}
+          download={item.outputName}
+          className="inline-flex items-center gap-1 text-xs px-2 h-7 rounded-md border border-border hover:border-foreground/50 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
+          <Download className="h-3 w-3" />
+          {strings.workspace.batchDownloadOne}
+        </a>
+      )}
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onRemove}
+            aria-label={strings.workspace.batchRemoveOne}
+            disabled={item.status === 'processing'}
+          >
+            <X className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{strings.workspace.batchRemoveOne}</TooltipContent>
+      </Tooltip>
+    </li>
   )
 }
 

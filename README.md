@@ -33,6 +33,7 @@ BlackLayer is developed with the help of AI models. I use them as a fast, unopin
 - Detects a digital signature in the source PDF and warns before creating a copy that would invalidate it.
 - Auto-detects common document types (DNI, passport, contract, payslip, invoice, financial) from filename, PDF text, and page dimensions, then recommends a protection level and suggests context-appropriate purposes.
 - Saves the recipient + purpose + level combos you use often as local presets. Nothing leaves the browser. A "Delete all local settings" action wipes them along with your theme and language preferences.
+- Batch mode: drop multiple files at once, apply one recipient + purpose + level + patterns to all, download individually or as a single zip. Manual redaction is per-document and stays out of the batch flow.
 
 ## What BlackLayer explicitly does not promise
 
@@ -76,7 +77,6 @@ Rough shape of what is planned. Nothing here is a commitment; priorities move as
 
 - Local OCR for image documents so photos of IDs, passports, and driving licences get the same content-based detection PDFs already do. First pass will target Spanish and English via a bundled, offline engine.
 - First-run onboarding for people who land on the app cold.
-- Batch protection of multiple files with a single recipient / purpose combo.
 
 **Later research**
 
