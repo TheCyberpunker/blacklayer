@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
   Check,
+  ChevronDown,
   Download,
   Eraser,
   FileText,
@@ -10,14 +11,18 @@ import {
   Monitor,
   Moon,
   Shield,
+  Sparkles,
   Sun,
   Undo2,
   Upload,
   X,
 } from 'lucide-react'
-import { profileFor, type ProtectionLevel, type RedactionRect } from './core/types.ts'
+import { profileFor, type ProtectionLevel, type RedactionRect, type WatermarkText } from './core/types.ts'
 import { releaseBase, type RenderedBase } from './core/preview/render.ts'
 import { composite } from './core/preview/composite.ts'
+import type { DetectionResult, DocumentType } from './core/detect/types.ts'
+import { UNKNOWN_DETECTION } from './core/detect/types.ts'
+import { purposesFor, recommendedLevel } from './core/detect/templates.ts'
 import { Button } from './components/ui/button.tsx'
 import { Input } from './components/ui/input.tsx'
 import { Label } from './components/ui/label.tsx'
@@ -30,7 +35,7 @@ import {
 import { useTheme, type Theme } from './hooks/use-theme.ts'
 import { useLang } from './hooks/use-lang.ts'
 import { useDebounced } from './hooks/use-debounced.ts'
-import { getStrings } from './locales/strings.ts'
+import { getStrings, type Strings } from './locales/strings.ts'
 import { cn } from './lib/utils.ts'
 
 type LoadedFile = {
@@ -42,6 +47,7 @@ type LoadedFile = {
 
 const ACCEPT = 'application/pdf,image/jpeg,image/png,image/webp'
 const LEVELS: ProtectionLevel[] = ['basic', 'recommended', 'maximum']
+const OVERRIDE_TYPES: DocumentType[] = ['identity', 'passport', 'driving_licence', 'contract', 'payslip', 'invoice', 'financial', 'unknown']
 const MIN_RECT = 0.008
 
 const detectKind = (file: File): 'pdf' | 'image' | null => {
@@ -69,6 +75,31 @@ const nextId = (): string =>
     ? crypto.randomUUID()
     : `${Date.now()}-${Math.floor(Math.random() * 1e9)}`
 
+function subtypeLabel(det: DetectionResult, strings: Strings): string | null {
+  switch (det.subtype) {
+    case 'dni': return strings.workspace.detectionSubtypeDni
+    case 'nie': return strings.workspace.detectionSubtypeNie
+    case 'tie': return strings.workspace.detectionSubtypeTie
+    case 'passport': return null // covered by type label
+    case 'driving_licence': return null
+    default: return null
+  }
+}
+
+function buildWatermarkText(
+  recipient: string,
+  purpose: string,
+  lang: 'en' | 'es',
+  custom?: readonly string[],
+): WatermarkText {
+  return {
+    recipient: recipient.trim() || (lang === 'es' ? 'DESTINATARIO' : 'RECIPIENT'),
+    purpose: purpose.trim() || (lang === 'es' ? 'MOTIVO' : 'PURPOSE'),
+    date: todayIso(),
+    custom,
+  }
+}
+
 export function App(): JSX.Element {
   const { lang, setLang } = useLang()
   const { theme, setTheme } = useTheme()
@@ -80,6 +111,10 @@ export function App(): JSX.Element {
   const [recipient, setRecipient] = useState('')
   const [purpose, setPurpose] = useState('')
   const [level, setLevel] = useState<ProtectionLevel>('recommended')
+  const [levelTouched, setLevelTouched] = useState(false)
+  const [detection, setDetection] = useState<DetectionResult>(UNKNOWN_DETECTION)
+  const [customEnabled, setCustomEnabled] = useState(false)
+  const [customText, setCustomText] = useState('')
   const [redactionsByPage, setRedactionsByPage] = useState<Map<number, RedactionRect[]>>(new Map())
   const [redactMode, setRedactMode] = useState(false)
   const [activeRect, setActiveRect] = useState<RedactionRect | null>(null)
@@ -93,15 +128,17 @@ export function App(): JSX.Element {
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
   const debouncedRecipient = useDebounced(recipient, 80)
   const debouncedPurpose = useDebounced(purpose, 80)
+  const debouncedCustom = useDebounced(customText, 80)
+
+  const effectiveCustom = customEnabled ? debouncedCustom.split(/\r?\n/) : undefined
 
   const previewProfile = useMemo(
     () =>
-      profileFor(level, {
-        recipient: debouncedRecipient.trim() || (lang === 'es' ? 'DESTINATARIO' : 'RECIPIENT'),
-        purpose: debouncedPurpose.trim() || (lang === 'es' ? 'MOTIVO' : 'PURPOSE'),
-        date: todayIso(),
-      }),
-    [level, debouncedRecipient, debouncedPurpose, lang],
+      profileFor(
+        level,
+        buildWatermarkText(debouncedRecipient, debouncedPurpose, lang, effectiveCustom),
+      ),
+    [level, debouncedRecipient, debouncedPurpose, lang, effectiveCustom],
   )
 
   const activePage = loaded?.base.pages[activePageIndex] ?? loaded?.base.pages[0]
@@ -158,10 +195,26 @@ export function App(): JSX.Element {
             // best-effort
           }
         }
-        setLoaded({ file: f, kind, base, hasSignature })
+        const loadedFile: LoadedFile = { file: f, kind, base, hasSignature }
+        setLoaded(loadedFile)
         setActivePageIndex(0)
         setRedactionsByPage(new Map())
         setRedactMode(false)
+        setCustomEnabled(false)
+        setCustomText('')
+        setLevelTouched(false)
+        setLevel('recommended')
+
+        // Run detection async; do not block the UI.
+        void (async () => {
+          try {
+            const { detectDocument } = await import('./core/detect/detect.ts')
+            const result = await detectDocument(f, base)
+            setDetection(result)
+          } catch {
+            setDetection(UNKNOWN_DETECTION)
+          }
+        })()
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         setError(`${t.errors.failed}: ${msg}`)
@@ -179,22 +232,45 @@ export function App(): JSX.Element {
     setRecipient('')
     setPurpose('')
     setLevel('recommended')
+    setLevelTouched(false)
+    setDetection(UNKNOWN_DETECTION)
+    setCustomEnabled(false)
+    setCustomText('')
     setRedactionsByPage(new Map())
     setRedactMode(false)
     clearOutput()
     setError(null)
   }, [loaded, clearOutput])
 
+  const setLevelManual = useCallback((l: ProtectionLevel) => {
+    setLevel(l)
+    setLevelTouched(true)
+  }, [])
+
+  const applyRecommendedLevel = useCallback(() => {
+    setLevel(recommendedLevel(detection))
+    setLevelTouched(true)
+  }, [detection])
+
+  const overrideDetection = useCallback((type: DocumentType) => {
+    setDetection((prev) => ({
+      ...prev,
+      type,
+      subtype: null,
+      country: prev.country,
+      confidence: 'medium',
+      manual: true,
+      reasons: ['manual override'],
+    }))
+  }, [])
+
   const protect = useCallback(async () => {
     if (!loaded) return
     setWorking(true)
     setError(null)
     try {
-      const profile = profileFor(level, {
-        recipient: recipient.trim() || (lang === 'es' ? 'DESTINATARIO' : 'RECIPIENT'),
-        purpose: purpose.trim() || (lang === 'es' ? 'MOTIVO' : 'PURPOSE'),
-        date: todayIso(),
-      })
+      const custom = customEnabled ? customText.split(/\r?\n/) : undefined
+      const profile = profileFor(level, buildWatermarkText(recipient, purpose, lang, custom))
       let blob: Blob
       if (loaded.kind === 'pdf') {
         const buf = await loaded.file.arrayBuffer()
@@ -237,7 +313,7 @@ export function App(): JSX.Element {
     } finally {
       setWorking(false)
     }
-  }, [loaded, level, recipient, purpose, lang, redactionsByPage, t, clearOutput])
+  }, [loaded, level, recipient, purpose, lang, customEnabled, customText, redactionsByPage, t, clearOutput])
 
   const onDrop = useCallback(
     (e: React.DragEvent<HTMLElement>) => {
@@ -377,9 +453,36 @@ export function App(): JSX.Element {
             recipient={recipient}
             purpose={purpose}
             level={level}
-            onLevelChange={setLevel}
+            levelTouched={levelTouched}
+            detection={detection}
+            onOverrideDetection={overrideDetection}
+            onApplyRecommended={applyRecommendedLevel}
+            onLevelChange={setLevelManual}
             onRecipient={setRecipient}
             onPurpose={setPurpose}
+            customEnabled={customEnabled}
+            customText={customText}
+            onToggleCustom={() => {
+              setCustomEnabled((v) => {
+                if (!v) {
+                  // Seed the textarea with current auto-generated lines when enabling
+                  const lines = previewProfile.watermark.text.custom
+                    ? previewProfile.watermark.text.custom
+                    : [
+                        lang === 'es'
+                          ? `COPIA PARA ${(recipient.trim() || 'DESTINATARIO').toUpperCase()}`
+                          : `COPY FOR ${(recipient.trim() || 'RECIPIENT').toUpperCase()}`,
+                        lang === 'es'
+                          ? `SOLO PARA ${(purpose.trim() || 'MOTIVO').toUpperCase()}`
+                          : `FOR ${(purpose.trim() || 'PURPOSE').toUpperCase()} ONLY`,
+                        todayIso(),
+                      ]
+                  setCustomText(lines.join('\n'))
+                }
+                return !v
+              })
+            }}
+            onCustomText={setCustomText}
             onClear={clearDoc}
             onProtect={protect}
             canProtect={canProtect}
@@ -398,6 +501,7 @@ export function App(): JSX.Element {
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
+            redactionsByPageMap={redactionsByPage}
           />
         )}
       </main>
@@ -419,7 +523,7 @@ interface HeaderProps {
   onLangChange: (l: 'en' | 'es') => void
   theme: Theme
   onThemeChange: (t: Theme) => void
-  strings: ReturnType<typeof getStrings>
+  strings: Strings
 }
 
 function Header({ lang, onLangChange, theme, onThemeChange, strings }: HeaderProps): JSX.Element {
@@ -488,7 +592,7 @@ interface HeroDropProps {
   onDragOver: (e: React.DragEvent<HTMLElement>) => void
   onDragLeave: () => void
   onFiles: (list: FileList | null | undefined) => void
-  strings: ReturnType<typeof getStrings>
+  strings: Strings
   error: string | null
 }
 
@@ -563,9 +667,17 @@ interface WorkspaceProps {
   recipient: string
   purpose: string
   level: ProtectionLevel
+  levelTouched: boolean
+  detection: DetectionResult
+  onOverrideDetection: (type: DocumentType) => void
+  onApplyRecommended: () => void
   onLevelChange: (l: ProtectionLevel) => void
   onRecipient: (v: string) => void
   onPurpose: (v: string) => void
+  customEnabled: boolean
+  customText: string
+  onToggleCustom: () => void
+  onCustomText: (v: string) => void
   onClear: () => void
   onProtect: () => void
   canProtect: boolean
@@ -573,7 +685,7 @@ interface WorkspaceProps {
   outputUrl: string | null
   outputName: string
   error: string | null
-  strings: ReturnType<typeof getStrings>
+  strings: Strings
   previewMetadataMode: 'preserve' | 'neutralize'
   redactMode: boolean
   onToggleRedactMode: () => void
@@ -584,6 +696,7 @@ interface WorkspaceProps {
   onPointerDown: (e: React.PointerEvent<HTMLCanvasElement>) => void
   onPointerMove: (e: React.PointerEvent<HTMLCanvasElement>) => void
   onPointerUp: (e: React.PointerEvent<HTMLCanvasElement>) => void
+  redactionsByPageMap: ReadonlyMap<number, RedactionRect[]>
 }
 
 function Workspace(props: WorkspaceProps): JSX.Element {
@@ -595,9 +708,17 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     recipient,
     purpose,
     level,
+    levelTouched,
+    detection,
+    onOverrideDetection,
+    onApplyRecommended,
     onLevelChange,
     onRecipient,
     onPurpose,
+    customEnabled,
+    customText,
+    onToggleCustom,
+    onCustomText,
     onClear,
     onProtect,
     canProtect,
@@ -616,10 +737,14 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     onPointerDown,
     onPointerMove,
     onPointerUp,
+    redactionsByPageMap,
   } = props
 
   const sizeKb = (loaded.file.size / 1024).toFixed(1)
   const isMultiPage = loaded.base.totalPages > 1
+  const suggestions = purposesFor(detection.type, strings.header.langLabel === 'Idioma' ? 'es' : 'en')
+  const suggestedLevel = recommendedLevel(detection)
+  const showRecommendationCallout = detection.type !== 'unknown' && !levelTouched && suggestedLevel !== level
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-8 animate-fade-in">
@@ -645,6 +770,12 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             {strings.workspace.clear}
           </Button>
         </div>
+
+        <DetectionBadge
+          detection={detection}
+          strings={strings}
+          onOverride={onOverrideDetection}
+        />
 
         <div
           className={cn(
@@ -681,7 +812,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               loaded={loaded}
               activePageIndex={activePageIndex}
               onSelectPage={onSelectPage}
-              redactionsByPage={props}
+              redactionsByPage={redactionsByPageMap}
               strings={strings}
             />
           )}
@@ -717,6 +848,27 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               autoComplete="off"
               maxLength={80}
             />
+            {suggestions.length > 0 && (
+              <div className="pt-1.5">
+                <div className="flex flex-wrap gap-1.5">
+                  {suggestions.slice(0, 4).map((s) => (
+                    <button
+                      key={s.id}
+                      type="button"
+                      onClick={() => onPurpose(s.label)}
+                      className={cn(
+                        'text-[11px] px-2 py-1 rounded-full border transition-colors',
+                        purpose === s.label
+                          ? 'border-foreground bg-foreground text-background'
+                          : 'border-border hover:border-foreground/50 text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {s.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -730,6 +882,21 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             <p className="text-xs text-muted-foreground/80 font-mono">
               {strings.workspace.metadataNoteRemoved}
             </p>
+          )}
+          {showRecommendationCallout && (
+            <button
+              type="button"
+              onClick={onApplyRecommended}
+              className="mt-2 w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md border border-border hover:border-foreground/40 hover:bg-muted/50 text-left transition-colors"
+            >
+              <span className="flex items-center gap-2 text-xs">
+                <Sparkles className="h-3.5 w-3.5 text-foreground/70" />
+                {strings.workspace.recommendedFor(strings.workspace.detectionLabel[detection.type])}
+              </span>
+              <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+                {strings.workspace.applyRecommended}
+              </span>
+            </button>
           )}
         </div>
 
@@ -791,6 +958,36 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           )}
         </div>
 
+        {/* Custom text */}
+        <div className="space-y-2 pt-1 border-t border-border/60">
+          <button
+            type="button"
+            onClick={onToggleCustom}
+            className="pt-3 flex items-center justify-between w-full text-left"
+            aria-expanded={customEnabled}
+          >
+            <Label className="cursor-pointer">{strings.workspace.customizeText}</Label>
+            <ChevronDown
+              className={cn(
+                'h-4 w-4 text-muted-foreground transition-transform',
+                customEnabled ? 'rotate-180' : '',
+              )}
+            />
+          </button>
+          {customEnabled && (
+            <div className="space-y-1.5">
+              <textarea
+                aria-label={strings.workspace.customTextLabel}
+                value={customText}
+                onChange={(e) => onCustomText(e.target.value)}
+                rows={4}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background resize-y"
+              />
+              <p className="text-[11px] text-muted-foreground">{strings.workspace.customTextHint}</p>
+            </div>
+          )}
+        </div>
+
         {loaded.kind === 'pdf' && loaded.hasSignature && (
           <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 flex items-start gap-2 text-xs text-destructive">
             <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
@@ -846,6 +1043,71 @@ function Workspace(props: WorkspaceProps): JSX.Element {
   )
 }
 
+// ---------- Detection badge ----------
+
+function DetectionBadge({
+  detection,
+  strings,
+  onOverride,
+}: {
+  detection: DetectionResult
+  strings: Strings
+  onOverride: (type: DocumentType) => void
+}): JSX.Element | null {
+  if (detection.type === 'unknown' && !detection.manual && detection.confidence === 'unknown') {
+    return null
+  }
+  const typeLabel = strings.workspace.detectionLabel[detection.type]
+  const subLabel = subtypeLabel(detection, strings)
+  const primaryText = detection.type === 'unknown'
+    ? strings.workspace.detectionLabel.unknown
+    : strings.workspace.detected(typeLabel)
+  const showLow = detection.confidence === 'low'
+
+  return (
+    <div className="mb-3 flex items-center gap-2 flex-wrap">
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className={cn(
+              'inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs',
+              'border transition-colors',
+              detection.manual
+                ? 'border-foreground/50 bg-foreground/5'
+                : 'border-border hover:border-foreground/40 bg-muted/30',
+            )}
+          >
+            <Sparkles className="h-3 w-3 text-foreground/70" />
+            <span className="font-medium">{primaryText}</span>
+            {subLabel && (
+              <span className="text-muted-foreground">· {subLabel}</span>
+            )}
+            <ChevronDown className="h-3 w-3 opacity-60 ml-1" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {OVERRIDE_TYPES.map((tp) => (
+            <DropdownMenuItem key={tp} onSelect={() => onOverride(tp)}>
+              {strings.workspace.detectionLabel[tp]}
+              {detection.type === tp && <Check className="h-3.5 w-3.5 ml-2 opacity-70" />}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {showLow && (
+        <span className="text-[11px] text-muted-foreground">{strings.workspace.detectedLow}</span>
+      )}
+      {detection.manual && (
+        <span className="text-[11px] font-mono text-muted-foreground">
+          {strings.workspace.detectedManual}
+        </span>
+      )}
+    </div>
+  )
+}
+
 // ---------- Page strip ----------
 
 function PageStrip({
@@ -858,13 +1120,9 @@ function PageStrip({
   loaded: LoadedFile
   activePageIndex: number
   onSelectPage: (i: number) => void
-  redactionsByPage: unknown // narrowed below via WorkspaceProps parent context
-  strings: ReturnType<typeof getStrings>
+  redactionsByPage: ReadonlyMap<number, RedactionRect[]>
+  strings: Strings
 }): JSX.Element {
-  // The parent passes the whole WorkspaceProps as `redactionsByPage` for convenience;
-  // we only read the total count via the existing indicators. For this strip we just
-  // mark pages that have any redactions.
-  void redactionsByPage
   const pages = loaded.base.pages
   const total = loaded.base.totalPages
   const rendered = loaded.base.renderedPageCount
@@ -877,14 +1135,18 @@ function PageStrip({
         aria-label={strings.workspace.pageStripLabel}
         className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1"
       >
-        {pages.map((p) => (
-          <PageThumb
-            key={p.index}
-            page={p}
-            selected={p.index === activePageIndex}
-            onSelect={() => onSelectPage(p.index)}
-          />
-        ))}
+        {pages.map((p) => {
+          const rects = redactionsByPage.get(p.index) ?? []
+          return (
+            <PageThumb
+              key={p.index}
+              page={p}
+              selected={p.index === activePageIndex}
+              redactionCount={rects.length}
+              onSelect={() => onSelectPage(p.index)}
+            />
+          )
+        })}
       </div>
       {showCappedNote && (
         <p className="text-[11px] font-mono text-muted-foreground text-center">
@@ -898,10 +1160,12 @@ function PageStrip({
 function PageThumb({
   page,
   selected,
+  redactionCount,
   onSelect,
 }: {
   page: LoadedFile['base']['pages'][number]
   selected: boolean
+  redactionCount: number
   onSelect: () => void
 }): JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement>(null)
@@ -928,10 +1192,8 @@ function PageThumb({
       aria-selected={selected}
       onClick={onSelect}
       className={cn(
-        'shrink-0 rounded-md overflow-hidden border-2 transition-colors bg-white',
-        selected
-          ? 'border-foreground'
-          : 'border-border hover:border-foreground/40',
+        'relative shrink-0 rounded-md overflow-hidden border-2 transition-colors bg-white',
+        selected ? 'border-foreground' : 'border-border hover:border-foreground/40',
       )}
       style={{ width: widthPx, height: heightPx }}
       title={`Page ${page.index + 1}`}
@@ -939,12 +1201,15 @@ function PageThumb({
       <canvas ref={canvasRef} className="w-full h-full object-contain" />
       <span
         className={cn(
-          'absolute -mt-5 ml-1 text-[10px] font-mono px-1 rounded',
+          'absolute bottom-0.5 left-0.5 text-[10px] font-mono px-1 rounded',
           selected ? 'bg-foreground text-background' : 'bg-black/60 text-white',
         )}
       >
         {page.index + 1}
       </span>
+      {redactionCount > 0 && (
+        <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-foreground border border-background" />
+      )}
     </button>
   )
 }
@@ -956,7 +1221,7 @@ function LevelPicker({
 }: {
   level: ProtectionLevel
   onChange: (l: ProtectionLevel) => void
-  strings: ReturnType<typeof getStrings>
+  strings: Strings
 }): JSX.Element {
   const labels: Record<ProtectionLevel, string> = {
     basic: strings.workspace.levelBasic,

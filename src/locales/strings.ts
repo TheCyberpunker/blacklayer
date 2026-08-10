@@ -1,5 +1,6 @@
 import type { Lang } from '../hooks/use-lang.ts'
 import type { ProtectionLevel } from '../core/types.ts'
+import type { DocumentType } from '../core/detect/types.ts'
 
 export interface Strings {
   header: {
@@ -51,6 +52,22 @@ export interface Strings {
     pageStripLabel: string
     pageStripCapped: (rendered: number, total: number) => string
     pageStripCurrent: (current: number, total: number) => string
+    detected: (label: string) => string
+    detectedLow: string
+    detectedManual: string
+    detectionLabel: Record<DocumentType, string>
+    detectionSubtypeDni: string
+    detectionSubtypeNie: string
+    detectionSubtypeTie: string
+    detectionSubtypePassport: string
+    detectionSubtypeDrivingLicence: string
+    changeDetection: string
+    recommendedFor: (docLabel: string) => string
+    applyRecommended: string
+    purposeSuggestionsLabel: string
+    customizeText: string
+    customTextLabel: string
+    customTextHint: string
   }
   result: {
     ready: string
@@ -130,6 +147,31 @@ export const enStrings: Strings = {
     pageStripLabel: 'Pages',
     pageStripCapped: (rendered, total) => `Showing first ${rendered} of ${total} pages`,
     pageStripCurrent: (current, total) => `Page ${current} of ${total}`,
+    detected: (label) => `${label} detected`,
+    detectedLow: 'This may be an identity document. Please confirm.',
+    detectedManual: 'Document type set manually',
+    detectionLabel: {
+      identity: 'Identity document',
+      passport: 'Passport',
+      driving_licence: 'Driving licence',
+      contract: 'Contract',
+      payslip: 'Payslip',
+      invoice: 'Invoice',
+      financial: 'Financial document',
+      unknown: 'Document',
+    },
+    detectionSubtypeDni: 'Spanish DNI',
+    detectionSubtypeNie: 'Spanish NIE',
+    detectionSubtypeTie: 'Spanish TIE',
+    detectionSubtypePassport: 'Passport',
+    detectionSubtypeDrivingLicence: 'Driving licence',
+    changeDetection: 'Change type',
+    recommendedFor: (docLabel) => `Recommended for ${docLabel.toLowerCase()}`,
+    applyRecommended: 'Apply recommended',
+    purposeSuggestionsLabel: 'Suggestions',
+    customizeText: 'Customize watermark text',
+    customTextLabel: 'Watermark text',
+    customTextHint: 'One line per row. Leave empty to use the default recipient + purpose text.',
   },
   result: {
     ready: 'Your protected copy is ready',
@@ -209,6 +251,31 @@ export const esStrings: Strings = {
     pageStripLabel: 'Páginas',
     pageStripCapped: (rendered, total) => `Mostrando las primeras ${rendered} de ${total} páginas`,
     pageStripCurrent: (current, total) => `Página ${current} de ${total}`,
+    detected: (label) => `${label} detectado`,
+    detectedLow: 'Podría ser un documento de identidad. Confírmalo por favor.',
+    detectedManual: 'Tipo de documento definido manualmente',
+    detectionLabel: {
+      identity: 'Documento de identidad',
+      passport: 'Pasaporte',
+      driving_licence: 'Permiso de conducir',
+      contract: 'Contrato',
+      payslip: 'Nómina',
+      invoice: 'Factura',
+      financial: 'Documento financiero',
+      unknown: 'Documento',
+    },
+    detectionSubtypeDni: 'DNI español',
+    detectionSubtypeNie: 'NIE',
+    detectionSubtypeTie: 'TIE',
+    detectionSubtypePassport: 'Pasaporte',
+    detectionSubtypeDrivingLicence: 'Permiso de conducir',
+    changeDetection: 'Cambiar tipo',
+    recommendedFor: (docLabel) => `Recomendado para ${docLabel.toLowerCase()}`,
+    applyRecommended: 'Aplicar recomendación',
+    purposeSuggestionsLabel: 'Sugerencias',
+    customizeText: 'Personalizar texto de la marca',
+    customTextLabel: 'Texto de la marca',
+    customTextHint: 'Una línea por renglón. Deja vacío para usar destinatario y motivo por defecto.',
   },
   result: {
     ready: 'Tu copia protegida está lista',
@@ -236,3 +303,4 @@ export const esStrings: Strings = {
 export function getStrings(lang: Lang): Strings {
   return lang === 'es' ? esStrings : enStrings
 }
+
