@@ -1,0 +1,37 @@
+.git
+.github
+.vscode
+.idea
+
+node_modules
+dist
+dist-ssr
+.cache
+.vite
+.turbo
+
+coverage
+.nyc_output
+playwright-report
+test-results
+
+# Private / gitignored working folders
+setup
+docs
+scripts/out
+
+# Local envs and logs
+.env
+.env.*
+!.env.example
+*.log
+npm-debug.log*
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Docker artifacts themselves
+Dockerfile
+compose.yaml
+.dockerignore

@@ -46,19 +46,28 @@ Then open the URL Vite prints. Drop a PDF or image, fill in recipient and purpos
 
 ## Docker
 
-The static build works from any HTTP server. A minimal setup:
+A `Dockerfile` and a `compose.yaml` are included. The image is a multi-stage build: `node:20-alpine` builds the static assets, then `nginx:1.27-alpine` serves them as a non-root user on port 8080. The runtime container is read-only with dropped capabilities.
 
 ```
-npm ci
-npm run build
+docker compose up -d --build
 ```
 
-Serve the `dist/` folder with a static container of your choice (nginx alpine, caddy, httpd). A ready-made Dockerfile is on the roadmap; contributions welcome.
+Then open http://localhost:8080.
+
+To stop and remove:
+
+```
+docker compose down
+```
+
+The nginx config in [nginx.conf](nginx.conf) enforces the same Content-Security-Policy as the app's `<meta>` tag, sets `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and a `Permissions-Policy` that disables camera, microphone, geolocation, and interest-cohort. If you host BlackLayer behind a proxy that rewrites headers, verify the CSP still reaches the browser.
 
 ## Contributing
 
 Contributions welcome. Please open an issue before large changes so the shape can be discussed. Do not include real personal data in issues, screenshots, or fixtures. Fictional samples only.
 
-## License
+## License and attributions
 
 MIT. See [LICENSE](LICENSE).
+
+Third-party runtime libraries and bundled fonts are attributed in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md).
