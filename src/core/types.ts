@@ -34,6 +34,21 @@ export interface WatermarkOptions {
   tileGapX: number
   tileGapY: number
   color: { r: number; g: number; b: number }
+  /**
+   * Per-document seed. Same seed → same output. Set once per file load via
+   * crypto.getRandomValues so each protected copy is subtly unique.
+   */
+  seed: number
+  /**
+   * Amount of controlled randomization to derive from `seed`. 0 = deterministic
+   * regular grid. 1 = maximum wobble that still stays readable. Callers should
+   * stay at or below ~0.6 to avoid the "smeared" look.
+   */
+  jitter: number
+  patterns: {
+    crosshatch: boolean
+    frame: boolean
+  }
 }
 
 export interface ProtectionProfile {
@@ -43,8 +58,34 @@ export interface ProtectionProfile {
 }
 
 const BASE_COLOR = { r: 0.1, g: 0.1, b: 0.1 }
+const NO_PATTERNS = { crosshatch: false, frame: false }
 
-export function profileFor(level: ProtectionLevel, text: WatermarkText): ProtectionProfile {
+export interface ProfileOverrides {
+  crosshatch?: boolean
+  frame?: boolean
+}
+
+export function profileFor(
+  level: ProtectionLevel,
+  text: WatermarkText,
+  seed: number,
+  overrides: ProfileOverrides = {},
+): ProtectionProfile {
+  const base = baseProfile(level, text)
+  return {
+    ...base,
+    watermark: {
+      ...base.watermark,
+      seed,
+      patterns: {
+        crosshatch: overrides.crosshatch ?? base.watermark.patterns.crosshatch,
+        frame: overrides.frame ?? base.watermark.patterns.frame,
+      },
+    },
+  }
+}
+
+function baseProfile(level: ProtectionLevel, text: WatermarkText): ProtectionProfile {
   switch (level) {
     case 'basic':
       return {
@@ -58,6 +99,9 @@ export function profileFor(level: ProtectionLevel, text: WatermarkText): Protect
           tileGapX: 320,
           tileGapY: 240,
           color: BASE_COLOR,
+          seed: 0,
+          jitter: 0,
+          patterns: NO_PATTERNS,
         },
         metadata: 'preserve',
       }
@@ -73,6 +117,9 @@ export function profileFor(level: ProtectionLevel, text: WatermarkText): Protect
           tileGapX: 280,
           tileGapY: 210,
           color: BASE_COLOR,
+          seed: 0,
+          jitter: 0.35,
+          patterns: NO_PATTERNS,
         },
         metadata: 'neutralize',
       }
@@ -88,6 +135,9 @@ export function profileFor(level: ProtectionLevel, text: WatermarkText): Protect
           tileGapX: 210,
           tileGapY: 170,
           color: BASE_COLOR,
+          seed: 0,
+          jitter: 0.5,
+          patterns: { crosshatch: true, frame: true },
         },
         metadata: 'neutralize',
       }
@@ -95,8 +145,8 @@ export function profileFor(level: ProtectionLevel, text: WatermarkText): Protect
 }
 
 /** Kept for the smoke test and any legacy callers. Wraps profileFor('recommended'). */
-export function defaultWatermarkOptions(text: WatermarkText): WatermarkOptions {
-  return profileFor('recommended', text).watermark
+export function defaultWatermarkOptions(text: WatermarkText, seed = 0): WatermarkOptions {
+  return profileFor('recommended', text, seed).watermark
 }
 
 export function formatWatermarkLines(text: WatermarkText, lang: 'en' | 'es'): string[] {

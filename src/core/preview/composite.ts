@@ -2,6 +2,7 @@ import type { RedactionRect, WatermarkOptions } from '../types.ts'
 import { formatWatermarkLines } from '../types.ts'
 import type { Lang } from '../../hooks/use-lang.ts'
 import type { RenderedPage } from './render.ts'
+import { drawWatermarkOnCanvas } from '../watermark/draw.ts'
 
 export interface CompositeArgs {
   target: HTMLCanvasElement
@@ -12,10 +13,6 @@ export interface CompositeArgs {
   activeRect?: RedactionRect | null
 }
 
-/**
- * Draw the given page's bitmap, then redaction fills, then watermark overlay
- * onto the target canvas.
- */
 export function composite({
   target,
   page,
@@ -44,51 +41,23 @@ export function composite({
   }
 
   const lines = formatWatermarkLines(options.text, lang)
-  if (lines.every((l) => !l.trim())) return
-
   const scaleFactor = Math.min(target.width, target.height) / 800
   const fontSize = Math.max(16, Math.round(options.fontSize * scaleFactor))
-  const lineHeight = fontSize * 1.2
-
-  ctx.save()
-  ctx.font = `bold ${fontSize}px Inter, system-ui, sans-serif`
   const { r, g, b } = options.color
-  ctx.fillStyle = `rgba(${Math.round(r * 255)}, ${Math.round(g * 255)}, ${Math.round(b * 255)}, ${options.opacity})`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
+  const rr = Math.round(r * 255)
+  const gg = Math.round(g * 255)
+  const bb = Math.round(b * 255)
+  const colorBase = (alpha: number) => `rgba(${rr}, ${gg}, ${bb}, ${alpha})`
 
-  if (options.tile) {
-    const stepX = Math.max(160, options.tileGapX * scaleFactor)
-    const stepY = Math.max(120, options.tileGapY * scaleFactor)
-    const diagonal = Math.hypot(target.width, target.height)
-    for (let y = -diagonal; y < diagonal * 2; y += stepY) {
-      for (let x = -diagonal; x < diagonal * 2; x += stepX) {
-        drawBlock(ctx, lines, x, y, options.rotationDeg, lineHeight)
-      }
-    }
-  } else {
-    drawBlock(ctx, lines, target.width / 2, target.height / 2, options.rotationDeg, lineHeight)
-  }
-
-  ctx.restore()
-}
-
-function drawBlock(
-  ctx: CanvasRenderingContext2D,
-  lines: string[],
-  cx: number,
-  cy: number,
-  rotationDeg: number,
-  lineHeight: number,
-): void {
-  ctx.save()
-  ctx.translate(cx, cy)
-  ctx.rotate((rotationDeg * Math.PI) / 180)
-  const startY = -((lines.length - 1) * lineHeight) / 2
-  lines.forEach((text, i) => {
-    if (text) ctx.fillText(text, 0, startY + i * lineHeight)
+  drawWatermarkOnCanvas({
+    ctx,
+    width: target.width,
+    height: target.height,
+    lines,
+    options,
+    effectiveFontSize: fontSize,
+    colorBase,
   })
-  ctx.restore()
 }
 
 function drawRedactions(

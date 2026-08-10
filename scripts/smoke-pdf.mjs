@@ -32,11 +32,15 @@ async function main() {
   const sample = await buildSample()
   console.log(`sample: ${sample.byteLength} bytes`)
 
-  const profile = profileFor('recommended', {
-    recipient: 'Hotel Test Madrid',
-    purpose: 'Identity verification',
-    date: '2026-08-10',
-  })
+  const profile = profileFor(
+    'recommended',
+    {
+      recipient: 'Hotel Test Madrid',
+      purpose: 'Identity verification',
+      date: '2026-08-10',
+    },
+    0xdeadbeef, // deterministic seed for the smoke test
+  )
 
   const t0 = performance.now()
   const { bytes: out, hadDigitalSignature } = await applyPdfWatermark({

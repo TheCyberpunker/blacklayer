@@ -1,6 +1,7 @@
 import type { ProtectionProfile, RedactionRect } from '../types.ts'
 import { formatWatermarkLines } from '../types.ts'
 import { applyRedactionsToCanvas } from '../redact/apply.ts'
+import { drawWatermarkOnCanvas } from '../watermark/draw.ts'
 
 export interface ApplyImageWatermarkArgs {
   source: Blob
@@ -12,11 +13,8 @@ export interface ApplyImageWatermarkArgs {
 }
 
 /**
- * Draw redactions, then watermark, then re-encode. Redactions are destructive
- * because canvas.toBlob() writes fresh pixel data. EXIF/GPS/IPTC do not survive
- * the re-encode. That means "preserve metadata" for images is effectively equal
- * to "neutralize" through this path; when preserve mode matters, we will need a
- * piexifjs re-injection step around this function.
+ * Draw redactions, then watermark, then re-encode. Metadata is dropped by the
+ * canvas re-encode (see note in the previous revision).
  */
 export async function applyImageWatermark({
   source,
@@ -45,28 +43,21 @@ export async function applyImageWatermark({
   const lines = formatWatermarkLines(options.text, lang)
   const scaleFactor = Math.min(canvas.width, canvas.height) / 800
   const fontSize = Math.max(18, Math.round(options.fontSize * scaleFactor))
-  const lineHeight = fontSize * 1.2
+  const { r, g, b } = options.color
+  const rr = Math.round(r * 255)
+  const gg = Math.round(g * 255)
+  const bb = Math.round(b * 255)
+  const colorBase = (alpha: number) => `rgba(${rr}, ${gg}, ${bb}, ${alpha})`
 
-  ctx.save()
-  ctx.font = `bold ${fontSize}px Inter, system-ui, sans-serif`
-  ctx.fillStyle = `rgba(${Math.round(options.color.r * 255)}, ${Math.round(options.color.g * 255)}, ${Math.round(options.color.b * 255)}, ${options.opacity})`
-  ctx.textAlign = 'center'
-  ctx.textBaseline = 'middle'
-
-  if (options.tile) {
-    const stepX = Math.max(160, options.tileGapX * scaleFactor)
-    const stepY = Math.max(120, options.tileGapY * scaleFactor)
-    const diagonal = Math.hypot(canvas.width, canvas.height)
-    for (let y = -diagonal; y < diagonal * 2; y += stepY) {
-      for (let x = -diagonal; x < diagonal * 2; x += stepX) {
-        drawBlock(ctx, lines, x, y, options.rotationDeg, lineHeight)
-      }
-    }
-  } else {
-    drawBlock(ctx, lines, canvas.width / 2, canvas.height / 2, options.rotationDeg, lineHeight)
-  }
-
-  ctx.restore()
+  drawWatermarkOnCanvas({
+    ctx,
+    width: canvas.width,
+    height: canvas.height,
+    lines,
+    options,
+    effectiveFontSize: fontSize,
+    colorBase,
+  })
 
   return new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
@@ -75,22 +66,4 @@ export async function applyImageWatermark({
       quality,
     )
   })
-}
-
-function drawBlock(
-  ctx: CanvasRenderingContext2D,
-  lines: string[],
-  cx: number,
-  cy: number,
-  rotationDeg: number,
-  lineHeight: number,
-): void {
-  ctx.save()
-  ctx.translate(cx, cy)
-  ctx.rotate((rotationDeg * Math.PI) / 180)
-  const startY = -((lines.length - 1) * lineHeight) / 2
-  lines.forEach((text, i) => {
-    ctx.fillText(text, 0, startY + i * lineHeight)
-  })
-  ctx.restore()
 }

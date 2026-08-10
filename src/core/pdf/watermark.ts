@@ -3,16 +3,12 @@ import type { ProtectionProfile, RedactionRect, WatermarkOptions } from '../type
 import { formatWatermarkLines } from '../types.ts'
 import { applyMetadataMode, hasDigitalSignature } from './metadata.ts'
 import { rasterizePageWithRedactions } from './rasterize-page.ts'
+import { mulberry32 } from '../random/prng.ts'
 
 export interface ApplyPdfWatermarkArgs {
   source: ArrayBuffer
   profile: ProtectionProfile
   lang: 'en' | 'es'
-  /**
-   * Redactions to bake into the output. Keyed by 0-based page index.
-   * A page with any redactions is rasterized via pdfjs and re-embedded, which
-   * destroys the underlying text and vector data for that page.
-   */
   redactionsByPage?: ReadonlyMap<number, readonly RedactionRect[]>
 }
 
@@ -33,9 +29,6 @@ export async function applyPdfWatermark({
   const rasterized: number[] = []
 
   if (redactionsByPage && redactionsByPage.size) {
-    // Rasterize each affected page: insert a replacement image page at the same
-    // index, then delete the original that shifted one to the right.
-    // Process indices in descending order so earlier indices stay valid.
     const indices = Array.from(redactionsByPage.keys()).sort((a, b) => b - a)
     for (const idx of indices) {
       const rects = redactionsByPage.get(idx) ?? []
@@ -55,26 +48,10 @@ export async function applyPdfWatermark({
   const font = await pdf.embedFont(StandardFonts.HelveticaBold)
   const options = profile.watermark
   const lines = formatWatermarkLines(options.text, lang)
-  const { r, g, b } = options.color
-  const color = rgb(r, g, b)
-  const lineHeight = options.fontSize * 1.2
-  const blockHeight = lines.length * lineHeight
 
   const pages = pdf.getPages()
   for (const page of pages) {
-    const { width, height } = page.getSize()
-    if (options.tile) {
-      const stepX = Math.max(120, options.tileGapX)
-      const stepY = Math.max(120, options.tileGapY)
-      const diagonal = Math.hypot(width, height)
-      for (let y = -diagonal; y < diagonal * 2; y += stepY) {
-        for (let x = -diagonal; x < diagonal * 2; x += stepX) {
-          drawBlock(page, lines, font, x, y, options, color, lineHeight, blockHeight)
-        }
-      }
-    } else {
-      drawBlock(page, lines, font, width / 2, height / 2, options, color, lineHeight, blockHeight)
-    }
+    drawWatermarkOnPdfPage(page, font, lines, options)
   }
 
   applyMetadataMode(pdf, profile.metadata)
@@ -83,31 +60,158 @@ export async function applyPdfWatermark({
   return { bytes, hadDigitalSignature: hadSignature, rasterizedPages: rasterized.sort((a, b) => a - b) }
 }
 
-function drawBlock(
+function drawWatermarkOnPdfPage(
+  page: ReturnType<PDFDocument['getPages']>[number],
+  font: Awaited<ReturnType<PDFDocument['embedFont']>>,
+  lines: string[],
+  options: WatermarkOptions,
+): void {
+  const { width, height } = page.getSize()
+  const { r, g, b } = options.color
+  const color = rgb(r, g, b)
+  const anyLines = lines.some((l) => l.trim())
+
+  if (anyLines) {
+    const rng = mulberry32(options.seed || 1)
+    const centered = () => rng() - 0.5
+
+    if (options.tile) {
+      const stepX = Math.max(120, options.tileGapX)
+      const stepY = Math.max(120, options.tileGapY)
+      const diagonal = Math.hypot(width, height)
+      const j = Math.max(0, Math.min(1, options.jitter))
+      for (let y = -diagonal; y < diagonal * 2; y += stepY) {
+        for (let x = -diagonal; x < diagonal * 2; x += stepX) {
+          const dx = centered() * options.tileGapX * 0.4 * j
+          const dy = centered() * options.tileGapY * 0.4 * j
+          const rot = options.rotationDeg + centered() * 24 * j
+          const opacityMul = 1 + centered() * 0.8 * j
+          const opacity = Math.max(0.05, Math.min(1, options.opacity * opacityMul))
+          const sizeMul = 1 + centered() * 0.5 * j
+          const size = Math.max(10, options.fontSize * sizeMul)
+          const shouldEmphasize = j > 0.1 && rng() < 0.12
+          const finalOpacity = shouldEmphasize ? Math.min(1, opacity * 1.7) : opacity
+          drawPdfBlock(page, lines, font, x + dx, y + dy, rot, size, finalOpacity, color)
+        }
+      }
+    } else {
+      drawPdfBlock(page, lines, font, width / 2, height / 2, options.rotationDeg, options.fontSize, options.opacity, color)
+    }
+  }
+
+  if (options.patterns.crosshatch) {
+    drawPdfCrosshatch(page, width, height, options, color)
+  }
+  if (options.patterns.frame) {
+    drawPdfFrame(page, width, height, options, color)
+  }
+}
+
+function drawPdfBlock(
   page: ReturnType<PDFDocument['getPages']>[number],
   lines: string[],
   font: Awaited<ReturnType<PDFDocument['embedFont']>>,
   cx: number,
   cy: number,
-  options: WatermarkOptions,
+  rotDeg: number,
+  fontSize: number,
+  opacity: number,
   color: ReturnType<typeof rgb>,
-  lineHeight: number,
-  blockHeight: number,
 ): void {
-  const rot = degrees(options.rotationDeg)
+  const lineHeight = fontSize * 1.2
+  const blockHeight = lines.length * lineHeight
   const startY = cy + blockHeight / 2 - lineHeight
+  const rot = degrees(rotDeg)
   lines.forEach((text, i) => {
-    const textWidth = font.widthOfTextAtSize(text, options.fontSize)
+    if (!text) return
+    const textWidth = font.widthOfTextAtSize(text, fontSize)
     page.drawText(text, {
       x: cx - textWidth / 2,
       y: startY - i * lineHeight,
-      size: options.fontSize,
+      size: fontSize,
       font,
       color,
-      opacity: options.opacity,
+      opacity,
       rotate: rot,
     })
   })
+}
+
+function drawPdfCrosshatch(
+  page: ReturnType<PDFDocument['getPages']>[number],
+  width: number,
+  height: number,
+  options: WatermarkOptions,
+  color: ReturnType<typeof rgb>,
+): void {
+  const scaleFactor = Math.min(width, height) / 800
+  const spacing = Math.max(12, 22 * scaleFactor)
+  const alpha = Math.max(0.03, options.opacity * 0.18)
+  const thickness = Math.max(0.4, 0.6 * scaleFactor)
+  const diagonal = Math.hypot(width, height)
+  const cx = width / 2
+  const cy = height / 2
+
+  const drawLines = (angleDeg: number, step: number) => {
+    const a = (angleDeg * Math.PI) / 180
+    const cos = Math.cos(a)
+    const sin = Math.sin(a)
+    for (let y = -diagonal; y <= diagonal; y += step) {
+      // Endpoints in local (unrotated) space, then rotated + translated.
+      const x1 = -diagonal
+      const y1 = y
+      const x2 = diagonal
+      const y2 = y
+      const px1 = cx + x1 * cos - y1 * sin
+      const py1 = cy + x1 * sin + y1 * cos
+      const px2 = cx + x2 * cos - y2 * sin
+      const py2 = cy + x2 * sin + y2 * cos
+      page.drawLine({
+        start: { x: px1, y: py1 },
+        end: { x: px2, y: py2 },
+        thickness,
+        color,
+        opacity: alpha,
+      })
+    }
+  }
+
+  drawLines(30, spacing)
+  drawLines(-60, spacing * 1.4)
+}
+
+function drawPdfFrame(
+  page: ReturnType<PDFDocument['getPages']>[number],
+  width: number,
+  height: number,
+  options: WatermarkOptions,
+  color: ReturnType<typeof rgb>,
+): void {
+  const scaleFactor = Math.min(width, height) / 800
+  const margin = Math.max(14, 24 * scaleFactor)
+  const gap = Math.max(3, 5 * scaleFactor)
+  const thickness = Math.max(0.6, 1.2 * scaleFactor)
+  const alpha = Math.min(1, options.opacity * 1.4)
+
+  const rect = (m: number) => {
+    const w = width - m * 2
+    const h = height - m * 2
+    if (w <= 0 || h <= 0) return
+    page.drawRectangle({
+      x: m,
+      y: m,
+      width: w,
+      height: h,
+      borderColor: color,
+      borderWidth: thickness,
+      borderOpacity: alpha,
+      color: undefined,
+      opacity: 0,
+    })
+  }
+
+  rect(margin)
+  rect(margin + gap)
 }
 
 export async function inspectPdf(source: ArrayBuffer): Promise<{ hasSignature: boolean; pageCount: number }> {

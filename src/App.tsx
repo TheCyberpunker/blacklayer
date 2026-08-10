@@ -23,6 +23,7 @@ import { composite } from './core/preview/composite.ts'
 import type { DetectionResult, DocumentType } from './core/detect/types.ts'
 import { UNKNOWN_DETECTION } from './core/detect/types.ts'
 import { purposesFor, recommendedLevel } from './core/detect/templates.ts'
+import { generateSeed } from './core/random/seed.ts'
 import { Button } from './components/ui/button.tsx'
 import { Input } from './components/ui/input.tsx'
 import { Label } from './components/ui/label.tsx'
@@ -115,6 +116,10 @@ export function App(): JSX.Element {
   const [detection, setDetection] = useState<DetectionResult>(UNKNOWN_DETECTION)
   const [customEnabled, setCustomEnabled] = useState(false)
   const [customText, setCustomText] = useState('')
+  const [docSeed, setDocSeed] = useState<number>(() => generateSeed())
+  const [advancedOpen, setAdvancedOpen] = useState(false)
+  const [crosshatchOverride, setCrosshatchOverride] = useState<boolean | null>(null)
+  const [frameOverride, setFrameOverride] = useState<boolean | null>(null)
   const [redactionsByPage, setRedactionsByPage] = useState<Map<number, RedactionRect[]>>(new Map())
   const [redactMode, setRedactMode] = useState(false)
   const [activeRect, setActiveRect] = useState<RedactionRect | null>(null)
@@ -137,8 +142,13 @@ export function App(): JSX.Element {
       profileFor(
         level,
         buildWatermarkText(debouncedRecipient, debouncedPurpose, lang, effectiveCustom),
+        docSeed,
+        {
+          crosshatch: crosshatchOverride ?? undefined,
+          frame: frameOverride ?? undefined,
+        },
       ),
-    [level, debouncedRecipient, debouncedPurpose, lang, effectiveCustom],
+    [level, debouncedRecipient, debouncedPurpose, lang, effectiveCustom, docSeed, crosshatchOverride, frameOverride],
   )
 
   const activePage = loaded?.base.pages[activePageIndex] ?? loaded?.base.pages[0]
@@ -204,6 +214,10 @@ export function App(): JSX.Element {
         setCustomText('')
         setLevelTouched(false)
         setLevel('recommended')
+        setDocSeed(generateSeed())
+        setAdvancedOpen(false)
+        setCrosshatchOverride(null)
+        setFrameOverride(null)
 
         // Run detection async; do not block the UI.
         void (async () => {
@@ -238,6 +252,9 @@ export function App(): JSX.Element {
     setCustomText('')
     setRedactionsByPage(new Map())
     setRedactMode(false)
+    setAdvancedOpen(false)
+    setCrosshatchOverride(null)
+    setFrameOverride(null)
     clearOutput()
     setError(null)
   }, [loaded, clearOutput])
@@ -270,7 +287,15 @@ export function App(): JSX.Element {
     setError(null)
     try {
       const custom = customEnabled ? customText.split(/\r?\n/) : undefined
-      const profile = profileFor(level, buildWatermarkText(recipient, purpose, lang, custom))
+      const profile = profileFor(
+        level,
+        buildWatermarkText(recipient, purpose, lang, custom),
+        docSeed,
+        {
+          crosshatch: crosshatchOverride ?? undefined,
+          frame: frameOverride ?? undefined,
+        },
+      )
       let blob: Blob
       if (loaded.kind === 'pdf') {
         const buf = await loaded.file.arrayBuffer()
@@ -313,7 +338,7 @@ export function App(): JSX.Element {
     } finally {
       setWorking(false)
     }
-  }, [loaded, level, recipient, purpose, lang, customEnabled, customText, redactionsByPage, t, clearOutput])
+  }, [loaded, level, recipient, purpose, lang, customEnabled, customText, redactionsByPage, docSeed, crosshatchOverride, frameOverride, t, clearOutput])
 
   const onDrop = useCallback(
     (e: React.DragEvent<HTMLElement>) => {
@@ -460,6 +485,12 @@ export function App(): JSX.Element {
             onLevelChange={setLevelManual}
             onRecipient={setRecipient}
             onPurpose={setPurpose}
+            advancedOpen={advancedOpen}
+            onToggleAdvanced={() => setAdvancedOpen((v) => !v)}
+            crosshatchOn={previewProfile.watermark.patterns.crosshatch}
+            frameOn={previewProfile.watermark.patterns.frame}
+            onCrosshatchChange={(v) => setCrosshatchOverride(v)}
+            onFrameChange={(v) => setFrameOverride(v)}
             customEnabled={customEnabled}
             customText={customText}
             onToggleCustom={() => {
@@ -674,6 +705,12 @@ interface WorkspaceProps {
   onLevelChange: (l: ProtectionLevel) => void
   onRecipient: (v: string) => void
   onPurpose: (v: string) => void
+  advancedOpen: boolean
+  onToggleAdvanced: () => void
+  crosshatchOn: boolean
+  frameOn: boolean
+  onCrosshatchChange: (v: boolean) => void
+  onFrameChange: (v: boolean) => void
   customEnabled: boolean
   customText: string
   onToggleCustom: () => void
@@ -715,6 +752,12 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     onLevelChange,
     onRecipient,
     onPurpose,
+    advancedOpen,
+    onToggleAdvanced,
+    crosshatchOn,
+    frameOn,
+    onCrosshatchChange,
+    onFrameChange,
     customEnabled,
     customText,
     onToggleCustom,
@@ -958,32 +1001,43 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           )}
         </div>
 
-        {/* Custom text */}
+        {/* Advanced */}
         <div className="space-y-2 pt-1 border-t border-border/60">
           <button
             type="button"
-            onClick={onToggleCustom}
+            onClick={onToggleAdvanced}
             className="pt-3 flex items-center justify-between w-full text-left"
-            aria-expanded={customEnabled}
+            aria-expanded={advancedOpen}
           >
-            <Label className="cursor-pointer">{strings.workspace.customizeText}</Label>
+            <Label className="cursor-pointer">{strings.workspace.advancedTitle}</Label>
             <ChevronDown
               className={cn(
                 'h-4 w-4 text-muted-foreground transition-transform',
-                customEnabled ? 'rotate-180' : '',
+                advancedOpen ? 'rotate-180' : '',
               )}
             />
           </button>
-          {customEnabled && (
-            <div className="space-y-1.5">
-              <textarea
-                aria-label={strings.workspace.customTextLabel}
-                value={customText}
-                onChange={(e) => onCustomText(e.target.value)}
-                rows={4}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background resize-y"
+          {advancedOpen && (
+            <div className="space-y-3">
+              <PatternToggle
+                label={strings.workspace.patternCrosshatchLabel}
+                hint={strings.workspace.patternCrosshatchHint}
+                checked={crosshatchOn}
+                onChange={onCrosshatchChange}
               />
-              <p className="text-[11px] text-muted-foreground">{strings.workspace.customTextHint}</p>
+              <PatternToggle
+                label={strings.workspace.patternFrameLabel}
+                hint={strings.workspace.patternFrameHint}
+                checked={frameOn}
+                onChange={onFrameChange}
+              />
+              <CustomTextBlock
+                enabled={customEnabled}
+                onToggle={onToggleCustom}
+                value={customText}
+                onChange={onCustomText}
+                strings={strings}
+              />
             </div>
           )}
         </div>
@@ -1028,6 +1082,8 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               {previewMetadataMode === 'neutralize' && (
                 <AppliedItem>{strings.result.appliedMetadata}</AppliedItem>
               )}
+              {crosshatchOn && <AppliedItem>{strings.workspace.appliedCrosshatch}</AppliedItem>}
+              {frameOn && <AppliedItem>{strings.workspace.appliedFrame}</AppliedItem>}
               {redactionsCount > 0 && (
                 <AppliedItem>{strings.result.appliedRedactions(redactionsCount)}</AppliedItem>
               )}
@@ -1264,5 +1320,72 @@ function AppliedItem({ children }: { children: React.ReactNode }): JSX.Element {
       <span className="mt-1 h-1 w-1 rounded-full bg-foreground/60 shrink-0" />
       <span>{children}</span>
     </li>
+  )
+}
+
+function PatternToggle({
+  label,
+  hint,
+  checked,
+  onChange,
+}: {
+  label: string
+  hint: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}): JSX.Element {
+  return (
+    <label className="flex items-start gap-3 cursor-pointer group">
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(e) => onChange(e.target.checked)}
+        className="mt-0.5 h-4 w-4 rounded border-input accent-foreground"
+      />
+      <div className="flex-1">
+        <span className="text-sm font-medium block leading-none">{label}</span>
+        <span className="text-[11px] text-muted-foreground block mt-1">{hint}</span>
+      </div>
+    </label>
+  )
+}
+
+function CustomTextBlock({
+  enabled,
+  onToggle,
+  value,
+  onChange,
+  strings,
+}: {
+  enabled: boolean
+  onToggle: () => void
+  value: string
+  onChange: (v: string) => void
+  strings: Strings
+}): JSX.Element {
+  return (
+    <div className="pt-1">
+      <label className="flex items-start gap-3 cursor-pointer">
+        <input
+          type="checkbox"
+          checked={enabled}
+          onChange={onToggle}
+          className="mt-0.5 h-4 w-4 rounded border-input accent-foreground"
+        />
+        <div className="flex-1">
+          <span className="text-sm font-medium block leading-none">{strings.workspace.customizeText}</span>
+          <span className="text-[11px] text-muted-foreground block mt-1">{strings.workspace.customTextHint}</span>
+        </div>
+      </label>
+      {enabled && (
+        <textarea
+          aria-label={strings.workspace.customTextLabel}
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          rows={4}
+          className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background resize-y"
+        />
+      )}
+    </div>
   )
 }

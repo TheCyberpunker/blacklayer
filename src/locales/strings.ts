@@ -68,6 +68,13 @@ export interface Strings {
     customizeText: string
     customTextLabel: string
     customTextHint: string
+    advancedTitle: string
+    patternCrosshatchLabel: string
+    patternCrosshatchHint: string
+    patternFrameLabel: string
+    patternFrameHint: string
+    appliedCrosshatch: string
+    appliedFrame: string
   }
   result: {
     ready: string
@@ -172,6 +179,13 @@ export const enStrings: Strings = {
     customizeText: 'Customize watermark text',
     customTextLabel: 'Watermark text',
     customTextHint: 'One line per row. Leave empty to use the default recipient + purpose text.',
+    advancedTitle: 'Advanced',
+    patternCrosshatchLabel: 'Add crosshatch security pattern',
+    patternCrosshatchHint: 'Thin diagonal lines across the whole page. Makes automated watermark removal harder.',
+    patternFrameLabel: 'Add border frame',
+    patternFrameHint: 'Two thin borders around the page.',
+    appliedCrosshatch: 'Crosshatch pattern applied',
+    appliedFrame: 'Border frame applied',
   },
   result: {
     ready: 'Your protected copy is ready',
@@ -276,6 +290,13 @@ export const esStrings: Strings = {
     customizeText: 'Personalizar texto de la marca',
     customTextLabel: 'Texto de la marca',
     customTextHint: 'Una línea por renglón. Deja vacío para usar destinatario y motivo por defecto.',
+    advancedTitle: 'Avanzado',
+    patternCrosshatchLabel: 'Añadir patrón de seguridad de trama',
+    patternCrosshatchHint: 'Líneas diagonales finas sobre toda la página. Dificulta la eliminación automática de la marca.',
+    patternFrameLabel: 'Añadir marco',
+    patternFrameHint: 'Dos bordes finos alrededor de la página.',
+    appliedCrosshatch: 'Patrón de trama aplicado',
+    appliedFrame: 'Marco aplicado',
   },
   result: {
     ready: 'Tu copia protegida está lista',
