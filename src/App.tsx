@@ -1,26 +1,55 @@
-import { useCallback, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  Download,
+  FileText,
+  ImageIcon,
+  Languages,
+  Monitor,
+  Moon,
+  Shield,
+  Sun,
+  Upload,
+  X,
+} from 'lucide-react'
 import { applyPdfWatermark } from './core/pdf/watermark.ts'
 import { applyImageWatermark } from './core/image/watermark.ts'
 import { defaultWatermarkOptions } from './core/types.ts'
-
-type Lang = 'en' | 'es'
+import { renderBase, type RenderedBase } from './core/preview/render.ts'
+import { composite } from './core/preview/composite.ts'
+import { Button } from './components/ui/button.tsx'
+import { Input } from './components/ui/input.tsx'
+import { Label } from './components/ui/label.tsx'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from './components/ui/dropdown-menu.tsx'
+import { useTheme, type Theme } from './hooks/use-theme.ts'
+import { useLang } from './hooks/use-lang.ts'
+import { useDebounced } from './hooks/use-debounced.ts'
+import { getStrings } from './locales/strings.ts'
+import { cn } from './lib/utils.ts'
 
 type LoadedFile = {
   file: File
   kind: 'pdf' | 'image'
+  base: RenderedBase
 }
 
-const detectKind = (file: File): LoadedFile['kind'] | null => {
+const ACCEPT = 'application/pdf,image/jpeg,image/png,image/webp'
+
+const detectKind = (file: File): 'pdf' | 'image' | null => {
   const t = file.type.toLowerCase()
   if (t === 'application/pdf') return 'pdf'
   if (t === 'image/jpeg' || t === 'image/png' || t === 'image/webp') return 'image'
   return null
 }
 
-const suggestOutputName = (name: string, kind: LoadedFile['kind']): string => {
+const suggestOutputName = (name: string, kind: 'pdf' | 'image'): string => {
   const dot = name.lastIndexOf('.')
   const base = dot >= 0 ? name.slice(0, dot) : name
-  const ext = kind === 'pdf' ? 'pdf' : (dot >= 0 ? name.slice(dot + 1) : 'png')
+  const ext = kind === 'pdf' ? 'pdf' : dot >= 0 ? name.slice(dot + 1) : 'png'
   return `${base}-blacklayer.${ext}`
 }
 
@@ -31,254 +60,504 @@ const todayIso = (): string => {
 }
 
 export function App(): JSX.Element {
-  const [lang, setLang] = useState<Lang>(() => (navigator.language?.startsWith('es') ? 'es' : 'en'))
+  const { lang, setLang } = useLang()
+  const { theme, setTheme } = useTheme()
+  const t = useMemo(() => getStrings(lang), [lang])
+
+  const [loading, setLoading] = useState(false)
   const [loaded, setLoaded] = useState<LoadedFile | null>(null)
   const [recipient, setRecipient] = useState('')
   const [purpose, setPurpose] = useState('')
+  const [dragActive, setDragActive] = useState(false)
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [outputUrl, setOutputUrl] = useState<string | null>(null)
   const [outputName, setOutputName] = useState<string>('')
-  const dropRef = useRef<HTMLDivElement>(null)
 
-  const t = useMemo(() => (lang === 'es' ? esStrings : enStrings), [lang])
-  const canProtect = !!loaded && recipient.trim() && purpose.trim() && !working
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  const debouncedRecipient = useDebounced(recipient, 80)
+  const debouncedPurpose = useDebounced(purpose, 80)
 
-  const onFile = useCallback((f: File | null | undefined) => {
-    setError(null)
-    if (outputUrl) URL.revokeObjectURL(outputUrl)
-    setOutputUrl(null)
+  const options = useMemo(
+    () =>
+      defaultWatermarkOptions({
+        recipient: debouncedRecipient.trim() || (lang === 'es' ? 'DESTINATARIO' : 'RECIPIENT'),
+        purpose: debouncedPurpose.trim() || (lang === 'es' ? 'MOTIVO' : 'PURPOSE'),
+        date: todayIso(),
+      }),
+    [debouncedRecipient, debouncedPurpose, lang],
+  )
+
+  // Live redraw on every relevant change.
+  useEffect(() => {
+    if (!loaded || !canvasRef.current) return
+    composite({ target: canvasRef.current, base: loaded.base, options, lang })
+  }, [loaded, options, lang])
+
+  const clearOutput = useCallback(() => {
+    setOutputUrl((prev) => {
+      if (prev) URL.revokeObjectURL(prev)
+      return null
+    })
     setOutputName('')
-    if (!f) return
-    const kind = detectKind(f)
-    if (!kind) {
-      setError(t.errUnsupported)
-      return
-    }
-    setLoaded({ file: f, kind })
-  }, [outputUrl, t])
+  }, [])
 
-  const onDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    dropRef.current?.classList.remove('drop-hot')
-    onFile(e.dataTransfer.files?.[0])
-  }, [onFile])
+  const onFiles = useCallback(
+    async (list: FileList | null | undefined) => {
+      const f = list?.[0]
+      if (!f) return
+      setError(null)
+      clearOutput()
+      const kind = detectKind(f)
+      if (!kind) {
+        setError(t.errors.unsupported)
+        return
+      }
+      setLoading(true)
+      try {
+        const base = await renderBase(f)
+        setLoaded({ file: f, kind, base })
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        setError(`${t.errors.failed}: ${msg}`)
+      } finally {
+        setLoading(false)
+      }
+    },
+    [t, clearOutput],
+  )
 
   const clearDoc = useCallback(() => {
-    if (outputUrl) URL.revokeObjectURL(outputUrl)
+    if (loaded) loaded.base.bitmap.close?.()
     setLoaded(null)
     setRecipient('')
     setPurpose('')
-    setOutputUrl(null)
-    setOutputName('')
+    clearOutput()
     setError(null)
-  }, [outputUrl])
+  }, [loaded, clearOutput])
 
   const protect = useCallback(async () => {
     if (!loaded) return
     setWorking(true)
     setError(null)
     try {
-      const options = defaultWatermarkOptions({
-        recipient: recipient.trim(),
-        purpose: purpose.trim(),
+      const realOptions = defaultWatermarkOptions({
+        recipient: recipient.trim() || (lang === 'es' ? 'DESTINATARIO' : 'RECIPIENT'),
+        purpose: purpose.trim() || (lang === 'es' ? 'MOTIVO' : 'PURPOSE'),
         date: todayIso(),
       })
       let blob: Blob
       if (loaded.kind === 'pdf') {
         const buf = await loaded.file.arrayBuffer()
-        const bytes = await applyPdfWatermark({ source: buf, options, lang })
+        const bytes = await applyPdfWatermark({ source: buf, options: realOptions, lang })
         blob = new Blob([bytes as unknown as ArrayBuffer], { type: 'application/pdf' })
       } else {
-        const outType = loaded.file.type === 'image/jpeg' ? 'image/jpeg'
-          : loaded.file.type === 'image/webp' ? 'image/webp'
-          : 'image/png'
-        blob = await applyImageWatermark({ source: loaded.file, options, lang, outputType: outType })
+        const outType =
+          loaded.file.type === 'image/jpeg'
+            ? 'image/jpeg'
+            : loaded.file.type === 'image/webp'
+              ? 'image/webp'
+              : 'image/png'
+        blob = await applyImageWatermark({
+          source: loaded.file,
+          options: realOptions,
+          lang,
+          outputType: outType,
+        })
       }
+      clearOutput()
       const url = URL.createObjectURL(blob)
       setOutputUrl(url)
       setOutputName(suggestOutputName(loaded.file.name, loaded.kind))
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
-      setError(`${t.errFailed}: ${msg}`)
+      setError(`${t.errors.failed}: ${msg}`)
     } finally {
       setWorking(false)
     }
-  }, [loaded, recipient, purpose, lang, t])
+  }, [loaded, recipient, purpose, lang, t, clearOutput])
+
+  const onDrop = useCallback(
+    (e: React.DragEvent<HTMLElement>) => {
+      e.preventDefault()
+      setDragActive(false)
+      onFiles(e.dataTransfer.files)
+    },
+    [onFiles],
+  )
+
+  const onDragOver = useCallback((e: React.DragEvent<HTMLElement>) => {
+    e.preventDefault()
+    setDragActive(true)
+  }, [])
+
+  const canProtect = !!loaded && !!recipient.trim() && !!purpose.trim() && !working
 
   return (
-    <div style={styles.page}>
-      <header style={styles.header}>
-        <h1 style={styles.wordmark}>BlackLayer</h1>
-        <div>
-          <button
-            type="button"
-            style={styles.langBtn}
-            onClick={() => setLang(lang === 'en' ? 'es' : 'en')}
-            aria-label="Toggle language"
-          >
-            {lang.toUpperCase()}
-          </button>
-        </div>
-      </header>
+    <div className="min-h-screen flex flex-col">
+      <Header
+        lang={lang}
+        onLangChange={setLang}
+        theme={theme}
+        onThemeChange={setTheme}
+        strings={t}
+      />
 
-      <main style={styles.main}>
-        <p style={styles.privacy}>{t.privacy}</p>
-
-        {!loaded && (
-          <div
-            ref={dropRef}
-            style={styles.drop}
-            onDragOver={(e) => { e.preventDefault(); dropRef.current?.classList.add('drop-hot') }}
-            onDragLeave={() => dropRef.current?.classList.remove('drop-hot')}
+      <main className="flex-1 w-full max-w-6xl mx-auto px-6 pt-6 pb-16">
+        {!loaded && !loading && (
+          <HeroDrop
+            dragActive={dragActive}
             onDrop={onDrop}
-          >
-            <p style={styles.dropTitle}>{t.dropTitle}</p>
-            <p style={styles.dropSub}>{t.dropSub}</p>
-            <label style={styles.chooseBtn}>
-              {t.choose}
-              <input
-                type="file"
-                accept="application/pdf,image/jpeg,image/png,image/webp"
-                style={{ display: 'none' }}
-                onChange={(e) => onFile(e.target.files?.[0])}
-              />
-            </label>
+            onDragOver={onDragOver}
+            onDragLeave={() => setDragActive(false)}
+            onFiles={onFiles}
+            strings={t}
+            error={error}
+          />
+        )}
+
+        {loading && (
+          <div className="flex items-center justify-center py-32">
+            <div className="text-sm text-muted-foreground animate-pulse">
+              {lang === 'es' ? 'Cargando documento…' : 'Loading document…'}
+            </div>
           </div>
         )}
 
-        {loaded && (
-          <section style={styles.workspace}>
-            <div style={styles.docCard}>
-              <p style={styles.docName}>{loaded.file.name}</p>
-              <p style={styles.docMeta}>
-                {loaded.kind === 'pdf' ? 'PDF' : 'Image'} · {(loaded.file.size / 1024).toFixed(1)} KB
-              </p>
-              <button type="button" style={styles.linkBtn} onClick={clearDoc}>{t.clear}</button>
-            </div>
-
-            <div style={styles.form}>
-              <label style={styles.label}>
-                <span>{t.recipient}</span>
-                <input
-                  type="text"
-                  value={recipient}
-                  onChange={(e) => setRecipient(e.target.value)}
-                  placeholder={t.recipientPh}
-                  style={styles.input}
-                  maxLength={80}
-                />
-              </label>
-              <label style={styles.label}>
-                <span>{t.purpose}</span>
-                <input
-                  type="text"
-                  value={purpose}
-                  onChange={(e) => setPurpose(e.target.value)}
-                  placeholder={t.purposePh}
-                  style={styles.input}
-                  maxLength={80}
-                />
-              </label>
-
-              <button
-                type="button"
-                onClick={protect}
-                disabled={!canProtect}
-                style={{ ...styles.primaryBtn, opacity: canProtect ? 1 : 0.5 }}
-              >
-                {working ? t.working : t.protect}
-              </button>
-
-              {error && <p style={styles.error}>{error}</p>}
-
-              {outputUrl && (
-                <div style={styles.result}>
-                  <p style={styles.resultTitle}>{t.ready}</p>
-                  <a href={outputUrl} download={outputName} style={styles.downloadBtn}>
-                    {t.download}
-                  </a>
-                  <p style={styles.originalNote}>{t.originalUntouched}</p>
-                </div>
-              )}
-            </div>
-          </section>
+        {loaded && !loading && (
+          <Workspace
+            loaded={loaded}
+            canvasRef={canvasRef}
+            recipient={recipient}
+            purpose={purpose}
+            onRecipient={setRecipient}
+            onPurpose={setPurpose}
+            onClear={clearDoc}
+            onProtect={protect}
+            canProtect={canProtect}
+            working={working}
+            outputUrl={outputUrl}
+            outputName={outputName}
+            error={error}
+            strings={t}
+          />
         )}
       </main>
 
-      <footer style={styles.footer}>
-        <span>BlackLayer</span>
-        <span>·</span>
-        <span>{t.footerLocal}</span>
+      <footer className="border-t border-border/60">
+        <div className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between text-xs text-muted-foreground">
+          <span className="font-mono tracking-tight">BlackLayer</span>
+          <span>{t.footer.tagline}</span>
+        </div>
       </footer>
     </div>
   )
 }
 
-const enStrings = {
-  privacy: 'Your document never leaves this device.',
-  dropTitle: 'Drop a document here',
-  dropSub: 'PDF, JPG, PNG or WebP',
-  choose: 'Choose document',
-  recipient: 'Who is this copy for?',
-  recipientPh: 'Hotel, lawyer, landlord, company…',
-  purpose: 'Why are you sharing it?',
-  purposePh: 'Identity verification, hotel check-in…',
-  protect: 'Create protected copy',
-  working: 'Preparing…',
-  ready: 'Your protected copy is ready',
-  download: 'Download protected copy',
-  originalUntouched: 'Your original document has not been changed.',
-  clear: 'Clear document',
-  footerLocal: 'Local-first, open source.',
-  errUnsupported: 'Unsupported file type. Use PDF, JPG, PNG or WebP.',
-  errFailed: 'Could not create protected copy',
+// ---------- Header ----------
+
+interface HeaderProps {
+  lang: 'en' | 'es'
+  onLangChange: (l: 'en' | 'es') => void
+  theme: Theme
+  onThemeChange: (t: Theme) => void
+  strings: ReturnType<typeof getStrings>
 }
 
-const esStrings: typeof enStrings = {
-  privacy: 'Tus documentos nunca salen de este dispositivo.',
-  dropTitle: 'Arrastra un documento aquí',
-  dropSub: 'PDF, JPG, PNG o WebP',
-  choose: 'Seleccionar documento',
-  recipient: '¿Para quién es esta copia?',
-  recipientPh: 'Hotel, abogado, arrendador, empresa…',
-  purpose: '¿Para qué la vas a compartir?',
-  purposePh: 'Verificación de identidad, registro en hotel…',
-  protect: 'Crear copia protegida',
-  working: 'Preparando…',
-  ready: 'Tu copia protegida está lista',
-  download: 'Descargar copia protegida',
-  originalUntouched: 'El documento original no ha sido modificado.',
-  clear: 'Descartar documento',
-  footerLocal: 'Local, código abierto.',
-  errUnsupported: 'Tipo de archivo no soportado. Usa PDF, JPG, PNG o WebP.',
-  errFailed: 'No se pudo crear la copia protegida',
+function Header({ lang, onLangChange, theme, onThemeChange, strings }: HeaderProps): JSX.Element {
+  return (
+    <header className="border-b border-border/60 backdrop-blur supports-[backdrop-filter]:bg-background/70 sticky top-0 z-40">
+      <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <span className="text-lg font-bold tracking-tight">BlackLayer</span>
+          <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-muted-foreground border border-border/60 rounded px-2 py-0.5">
+            <Shield className="h-3 w-3" />
+            Local
+          </span>
+        </div>
+        <div className="flex items-center gap-1">
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="sm" aria-label={strings.header.langLabel}>
+                <Languages className="h-4 w-4" />
+                <span className="font-mono text-[11px] uppercase">{lang}</span>
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => onLangChange('en')}>English</DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onLangChange('es')}>Español</DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button variant="ghost" size="icon" aria-label={strings.header.themeLabel}>
+                {theme === 'dark' ? (
+                  <Moon className="h-4 w-4" />
+                ) : theme === 'light' ? (
+                  <Sun className="h-4 w-4" />
+                ) : (
+                  <Monitor className="h-4 w-4" />
+                )}
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem onSelect={() => onThemeChange('system')}>
+                <Monitor className="h-4 w-4 mr-2" />
+                {strings.header.themeSystem}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onThemeChange('light')}>
+                <Sun className="h-4 w-4 mr-2" />
+                {strings.header.themeLight}
+              </DropdownMenuItem>
+              <DropdownMenuItem onSelect={() => onThemeChange('dark')}>
+                <Moon className="h-4 w-4 mr-2" />
+                {strings.header.themeDark}
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
+        </div>
+      </div>
+    </header>
+  )
 }
 
-const styles: Record<string, React.CSSProperties> = {
-  page: { maxWidth: 960, margin: '0 auto', padding: '32px 24px', minHeight: '100vh', display: 'flex', flexDirection: 'column' },
-  header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 24 },
-  wordmark: { margin: 0, fontSize: 28, letterSpacing: '-0.02em', fontWeight: 700 },
-  langBtn: { background: 'transparent', border: '1px solid currentColor', padding: '6px 12px', borderRadius: 6, fontSize: 12, letterSpacing: '0.05em' },
-  main: { flex: 1 },
-  privacy: { fontSize: 14, opacity: 0.75, textAlign: 'center', marginTop: 0, marginBottom: 32 },
-  drop: { border: '2px dashed rgba(127,127,127,0.4)', borderRadius: 12, padding: '64px 24px', textAlign: 'center' },
-  dropTitle: { fontSize: 22, fontWeight: 500, marginBottom: 8, marginTop: 0 },
-  dropSub: { fontSize: 14, opacity: 0.6, marginTop: 0, marginBottom: 24 },
-  chooseBtn: { display: 'inline-block', padding: '10px 20px', border: '1px solid currentColor', borderRadius: 6, cursor: 'pointer', fontSize: 14 },
-  workspace: { display: 'grid', gridTemplateColumns: 'minmax(220px, 1fr) 2fr', gap: 32, alignItems: 'start' },
-  docCard: { padding: 20, border: '1px solid rgba(127,127,127,0.25)', borderRadius: 10 },
-  docName: { margin: 0, fontWeight: 600, fontSize: 14, wordBreak: 'break-all' },
-  docMeta: { margin: '4px 0 12px', fontSize: 12, opacity: 0.6 },
-  linkBtn: { background: 'transparent', border: 'none', padding: 0, textDecoration: 'underline', fontSize: 13, color: 'inherit' },
-  form: { display: 'flex', flexDirection: 'column', gap: 16 },
-  label: { display: 'flex', flexDirection: 'column', gap: 6, fontSize: 13, fontWeight: 500 },
-  input: { padding: '10px 12px', borderRadius: 6, border: '1px solid rgba(127,127,127,0.35)', fontSize: 14, background: 'transparent', color: 'inherit' },
-  primaryBtn: { padding: '12px 20px', border: 'none', borderRadius: 6, background: '#111', color: '#fff', fontSize: 15, fontWeight: 500 },
-  error: { color: '#b91c1c', fontSize: 13, margin: 0 },
-  result: { marginTop: 8, padding: 16, border: '1px solid rgba(127,127,127,0.25)', borderRadius: 8, display: 'flex', flexDirection: 'column', gap: 8 },
-  resultTitle: { margin: 0, fontWeight: 600, fontSize: 15 },
-  downloadBtn: { display: 'inline-block', padding: '10px 16px', background: '#111', color: '#fff', textDecoration: 'none', borderRadius: 6, textAlign: 'center', fontSize: 14 },
-  originalNote: { margin: 0, fontSize: 12, opacity: 0.6 },
-  footer: { marginTop: 32, paddingTop: 16, borderTop: '1px solid rgba(127,127,127,0.15)', display: 'flex', gap: 8, justifyContent: 'center', fontSize: 12, opacity: 0.5 },
+// ---------- Hero drop ----------
+
+interface HeroDropProps {
+  dragActive: boolean
+  onDrop: (e: React.DragEvent<HTMLElement>) => void
+  onDragOver: (e: React.DragEvent<HTMLElement>) => void
+  onDragLeave: () => void
+  onFiles: (list: FileList | null | undefined) => void
+  strings: ReturnType<typeof getStrings>
+  error: string | null
+}
+
+function HeroDrop({
+  dragActive,
+  onDrop,
+  onDragOver,
+  onDragLeave,
+  onFiles,
+  strings,
+  error,
+}: HeroDropProps): JSX.Element {
+  return (
+    <div className="max-w-2xl mx-auto pt-12 pb-8 text-center animate-fade-in">
+      <h1 className="text-3xl sm:text-4xl font-bold tracking-tight text-balance">
+        {strings.hero.title}
+      </h1>
+      <p className="mt-3 text-muted-foreground text-base sm:text-lg text-balance">
+        {strings.hero.subtitle}
+      </p>
+
+      <label
+        onDrop={onDrop}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        className={cn(
+          'mt-10 group block cursor-pointer rounded-2xl border-2 border-dashed transition-colors',
+          'px-6 py-16 sm:py-20',
+          dragActive
+            ? 'border-foreground bg-muted/60'
+            : 'border-border hover:border-foreground/40 hover:bg-muted/30',
+        )}
+      >
+        <div className="flex flex-col items-center gap-4">
+          <div className="h-14 w-14 rounded-full bg-muted flex items-center justify-center text-foreground/70 group-hover:text-foreground transition-colors">
+            <Upload className="h-6 w-6" />
+          </div>
+          <div>
+            <p className="text-lg font-medium">{strings.hero.dropTitle}</p>
+            <p className="text-sm text-muted-foreground mt-1">{strings.hero.dropSub}</p>
+          </div>
+          <p className="text-xs font-mono uppercase tracking-wider text-muted-foreground mt-1">
+            {strings.hero.supported}
+          </p>
+        </div>
+        <input
+          type="file"
+          accept={ACCEPT}
+          className="sr-only"
+          onChange={(e) => onFiles(e.target.files)}
+        />
+      </label>
+
+      <p className="mt-6 text-xs text-muted-foreground flex items-center justify-center gap-1.5">
+        <Shield className="h-3 w-3" />
+        {strings.hero.privacy}
+      </p>
+
+      {error && (
+        <p className="mt-6 text-sm text-destructive">{error}</p>
+      )}
+    </div>
+  )
+}
+
+// ---------- Workspace ----------
+
+interface WorkspaceProps {
+  loaded: LoadedFile
+  canvasRef: React.RefObject<HTMLCanvasElement>
+  recipient: string
+  purpose: string
+  onRecipient: (v: string) => void
+  onPurpose: (v: string) => void
+  onClear: () => void
+  onProtect: () => void
+  canProtect: boolean
+  working: boolean
+  outputUrl: string | null
+  outputName: string
+  error: string | null
+  strings: ReturnType<typeof getStrings>
+}
+
+function Workspace(props: WorkspaceProps): JSX.Element {
+  const {
+    loaded,
+    canvasRef,
+    recipient,
+    purpose,
+    onRecipient,
+    onPurpose,
+    onClear,
+    onProtect,
+    canProtect,
+    working,
+    outputUrl,
+    outputName,
+    error,
+    strings,
+  } = props
+
+  const sizeKb = (loaded.file.size / 1024).toFixed(1)
+
+  return (
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-8 animate-fade-in">
+      {/* Preview */}
+      <section className="min-w-0">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2 text-sm">
+            {loaded.kind === 'pdf' ? (
+              <FileText className="h-4 w-4 text-muted-foreground" />
+            ) : (
+              <ImageIcon className="h-4 w-4 text-muted-foreground" />
+            )}
+            <span className="font-medium truncate max-w-xs" title={loaded.file.name}>
+              {loaded.file.name}
+            </span>
+            <span className="text-xs text-muted-foreground font-mono">
+              {loaded.kind === 'pdf' ? strings.workspace.pageCount(loaded.base.pageCount) : ''}
+              {loaded.kind === 'pdf' ? ' · ' : ''}
+              {strings.workspace.fileSize(sizeKb)}
+            </span>
+          </div>
+          <Button variant="ghost" size="sm" onClick={onClear}>
+            <X className="h-4 w-4" />
+            {strings.workspace.clear}
+          </Button>
+        </div>
+
+        <div className="rounded-xl border border-border bg-muted/30 p-3 sm:p-4">
+          <div className="relative w-full aspect-[3/4] sm:aspect-auto sm:min-h-[520px] bg-white rounded-lg overflow-hidden shadow-sm">
+            <canvas
+              ref={canvasRef}
+              className="absolute inset-0 w-full h-full object-contain"
+            />
+          </div>
+          {loaded.kind === 'pdf' && loaded.base.pageCount > 1 && (
+            <p className="mt-2 text-[11px] text-muted-foreground font-mono uppercase tracking-wider text-center">
+              {strings.workspace.documentLabel} · page 1 preview · all {loaded.base.pageCount} pages get the watermark on download
+            </p>
+          )}
+        </div>
+      </section>
+
+      {/* Controls */}
+      <aside className="lg:sticky lg:top-20 lg:self-start space-y-5">
+        <div>
+          <h2 className="text-lg font-semibold tracking-tight">{strings.workspace.protectionTitle}</h2>
+          <p className="mt-1 text-sm text-muted-foreground">{strings.workspace.protectionHelper}</p>
+        </div>
+
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <Label htmlFor="recipient">{strings.workspace.recipient}</Label>
+            <Input
+              id="recipient"
+              value={recipient}
+              onChange={(e) => onRecipient(e.target.value)}
+              placeholder={strings.workspace.recipientPh}
+              autoComplete="off"
+              maxLength={80}
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label htmlFor="purpose">{strings.workspace.purpose}</Label>
+            <Input
+              id="purpose"
+              value={purpose}
+              onChange={(e) => onPurpose(e.target.value)}
+              placeholder={strings.workspace.purposePh}
+              autoComplete="off"
+              maxLength={80}
+            />
+          </div>
+        </div>
+
+        <Button
+          onClick={onProtect}
+          disabled={!canProtect}
+          size="lg"
+          className="w-full"
+        >
+          {working ? strings.workspace.working : strings.workspace.protect}
+        </Button>
+
+        {error && <p className="text-sm text-destructive">{error}</p>}
+
+        {outputUrl && (
+          <div className="rounded-xl border border-border bg-muted/40 p-4 space-y-3 animate-fade-in">
+            <div>
+              <p className="text-sm font-semibold">{strings.result.ready}</p>
+              <p className="text-xs text-muted-foreground mt-0.5">{strings.result.readySub}</p>
+            </div>
+            <a
+              href={outputUrl}
+              download={outputName}
+              className={cn(
+                'inline-flex w-full items-center justify-center gap-2 h-10 px-4',
+                'rounded-md bg-primary text-primary-foreground text-sm font-medium',
+                'hover:bg-primary/90 transition-colors',
+              )}
+            >
+              <Download className="h-4 w-4" />
+              {strings.result.download}
+            </a>
+            <ul className="text-xs text-muted-foreground space-y-1 pt-1">
+              <AppliedItem>{strings.result.appliedRecipient}</AppliedItem>
+              <AppliedItem>{strings.result.appliedPurpose}</AppliedItem>
+              <AppliedItem>{strings.result.appliedTiled}</AppliedItem>
+              <AppliedItem>{strings.result.appliedLocalOnly}</AppliedItem>
+            </ul>
+            <p className="text-[11px] text-muted-foreground pt-1 border-t border-border/60">
+              {strings.result.originalNote}
+            </p>
+          </div>
+        )}
+      </aside>
+    </div>
+  )
+}
+
+function AppliedItem({ children }: { children: React.ReactNode }): JSX.Element {
+  return (
+    <li className="flex items-start gap-2">
+      <span className="mt-1 h-1 w-1 rounded-full bg-foreground/60" />
+      <span>{children}</span>
+    </li>
+  )
 }
