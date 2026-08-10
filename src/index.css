@@ -1,28 +1,94 @@
-*, *::before, *::after {
-  box-sizing: border-box;
-}
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
+@import '@fontsource/jetbrains-mono/400.css';
+@import '@fontsource/jetbrains-mono/500.css';
 
-html, body, #root {
-  margin: 0;
-  padding: 0;
-  min-height: 100%;
-  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  background: #fafafa;
-  color: #111;
-}
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
-@media (prefers-color-scheme: dark) {
+@layer base {
+  :root {
+    --background: 0 0% 99%;
+    --foreground: 0 0% 8%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 8%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 8%;
+
+    --primary: 0 0% 8%;
+    --primary-foreground: 0 0% 100%;
+
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 40%;
+
+    --accent: 0 0% 94%;
+    --accent-foreground: 0 0% 8%;
+
+    --destructive: 0 72% 45%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 0 0% 90%;
+    --input: 0 0% 90%;
+    --ring: 0 0% 8%;
+
+    --radius: 0.75rem;
+  }
+
+  .dark {
+    --background: 240 6% 6%;
+    --foreground: 0 0% 95%;
+
+    --card: 240 5% 8%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 240 5% 8%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 0 0% 95%;
+    --primary-foreground: 240 6% 6%;
+
+    --muted: 240 4% 14%;
+    --muted-foreground: 240 5% 60%;
+
+    --accent: 240 4% 14%;
+    --accent-foreground: 0 0% 95%;
+
+    --destructive: 0 63% 52%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 0 0% 95%;
+  }
+
+  * {
+    @apply border-border;
+  }
+
   html, body, #root {
-    background: #0d0d0f;
-    color: #f2f2f2;
+    @apply bg-background text-foreground;
+    font-family: theme('fontFamily.sans');
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+  }
+
+  html {
+    color-scheme: light dark;
+  }
+
+  ::selection {
+    background: hsl(var(--foreground));
+    color: hsl(var(--background));
   }
 }
 
-button {
-  font: inherit;
-  cursor: pointer;
-}
-
-a {
-  color: inherit;
+@layer utilities {
+  .no-scrollbar::-webkit-scrollbar { display: none; }
+  .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 }

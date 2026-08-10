@@ -2,7 +2,7 @@
 // Builds a synthetic 2-page PDF in memory, runs it through the watermark pipeline,
 // re-parses the output, and asserts what we expect: same page count, page sizes preserved,
 // each page's content stream now contains watermark text.
-import { PDFDocument, StandardFonts } from 'pdf-lib'
+import { PDFDocument, StandardFonts, PDFName } from 'pdf-lib'
 import { applyPdfWatermark } from '../src/core/pdf/watermark.ts'
 import { defaultWatermarkOptions } from '../src/core/types.ts'
 import { writeFile } from 'node:fs/promises'
@@ -47,6 +47,10 @@ async function main() {
   const t1 = performance.now()
   console.log(`protected: ${out.byteLength} bytes in ${(t1 - t0).toFixed(1)}ms`)
 
+  // Write artifacts first so they exist even if a later assertion fails.
+  await writeFile(join(outDir, 'sample-original.pdf'), sample)
+  await writeFile(join(outDir, 'sample-protected.pdf'), out)
+
   // Re-parse to check structure survived.
   const roundtrip = await PDFDocument.load(out)
   const pages = roundtrip.getPages()
@@ -57,20 +61,18 @@ async function main() {
   assert(p1.width === 595 && p1.height === 842, `p1 size wrong: ${JSON.stringify(p1)}`)
   assert(p2.width === 842 && p2.height === 595, `p2 size wrong: ${JSON.stringify(p2)}`)
 
-  // Content-stream verification will move to pdfjs-based text extraction in the full test suite (Phase 8).
-  // Here we assert that the pipeline embedded a font and drew visible content: output should be
-  // meaningfully larger than the source (Helvetica alone adds ~30KB, plus per-page tiled text ops).
+  // Content-stream text verification will move to pdfjs-based extraction in the full test suite (Phase 8).
+  // Here we check that (a) output grew meaningfully (font + tiled ops), and (b) every page has a Font
+  // resource attached via the pdf-lib API (works regardless of object-stream compression).
   const growth = out.byteLength - sample.byteLength
   assert(growth > 20000, `output only grew by ${growth} bytes, expected > 20KB (font + tiled text ops)`)
 
-  // Font resource dictionary check: the output must reference a font.
-  const raw = new TextDecoder('latin1').decode(out)
-  assert(raw.includes('/Font'), 'no /Font resource in output')
-  assert(raw.includes('Helvetica'), 'no Helvetica reference in output')
+  for (const [i, page] of pages.entries()) {
+    const res = page.node.Resources()
+    const font = res?.get(PDFName.of('Font'))
+    assert(!!font, `page ${i}: no /Font resource dictionary`)
+  }
 
-  // Write a copy so a human can eyeball it if they want.
-  await writeFile(join(outDir, 'sample-protected.pdf'), out)
-  await writeFile(join(outDir, 'sample-original.pdf'), sample)
   console.log('artifacts:')
   console.log(`  scripts/out/sample-original.pdf`)
   console.log(`  scripts/out/sample-protected.pdf`)

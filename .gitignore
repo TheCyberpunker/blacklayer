@@ -39,3 +39,6 @@ test-results/
 
 # Tauri (phase 7)
 src-tauri/target/
+
+# Local script artifacts
+scripts/out/
