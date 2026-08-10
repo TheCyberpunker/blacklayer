@@ -1,20 +1,21 @@
-import { PDFDocument, PDFName, PDFDict } from 'pdf-lib'
+import { PDFDocument, PDFName, PDFDict, PDFRef } from 'pdf-lib'
 import type { MetadataMode } from '../types.ts'
 
 /**
  * Apply metadata mode to a loaded PDFDocument.
  *
- * "neutralize" replaces every Info-dict field pdf-lib exposes with an empty or
- * BlackLayer-branded value. pdf-lib always writes /Producer as itself, so
- * "remove" and "neutralize" collapse to the same practical outcome for now.
- * "preserve" is a no-op.
+ * "neutralize" clears / replaces every field pdf-lib's Info-dict API exposes
+ * with an empty or BlackLayer-branded value AND drops the XMP metadata stream
+ * from the catalog. XMP is the noisier of the two: many producers write an
+ * edit history (xmpMM:History), a stable document UUID (xmpMM:DocumentID),
+ * and application traces (xmp:CreatorTool) that leak more than the Info dict.
  *
- * XMP metadata (a stream, not a dict) is not touched here yet. Documented as a
- * known limitation in the threat model; addressed when a proper XMP module lands.
+ * "preserve" is a no-op.
  */
 export function applyMetadataMode(pdf: PDFDocument, mode: MetadataMode): void {
   if (mode === 'preserve') return
 
+  // Info dictionary
   pdf.setTitle('')
   pdf.setAuthor('')
   pdf.setSubject('')
@@ -24,6 +25,36 @@ export function applyMetadataMode(pdf: PDFDocument, mode: MetadataMode): void {
   const now = new Date(0) // epoch; predictable and neutral
   pdf.setCreationDate(now)
   pdf.setModificationDate(now)
+
+  // XMP metadata stream
+  removeXmpMetadata(pdf)
+}
+
+/**
+ * Delete the /Metadata entry from the document catalog and from each page dict
+ * if present. Also deletes the underlying indirect stream object from the PDF
+ * context so unreferenced XMP bytes do not survive save.
+ *
+ * XMP holds edit history, application traces, and stable document IDs. Losing
+ * everything in the packet is the honest neutralize behaviour; nothing
+ * BlackLayer needs from XMP.
+ */
+function removeXmpMetadata(pdf: PDFDocument): void {
+  const metadataKey = PDFName.of('Metadata')
+
+  const dropFrom = (dict: PDFDict): void => {
+    const entry = dict.get(metadataKey)
+    if (!entry) return
+    dict.delete(metadataKey)
+    if (entry instanceof PDFRef) {
+      pdf.context.delete(entry)
+    }
+  }
+
+  dropFrom(pdf.catalog)
+  for (const page of pdf.getPages()) {
+    dropFrom(page.node)
+  }
 }
 
 /**

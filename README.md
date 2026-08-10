@@ -29,7 +29,7 @@ BlackLayer is developed with the help of AI models. I use them as a fast, unopin
 - Uses a per-document cryptographic random seed to vary watermark position, rotation, size, and opacity across tiles. Two exported copies of the same document look subtly different, so tools that expect a regular grid have less to lock onto.
 - Optionally adds a crosshatch security pattern and a border frame at higher protection levels.
 - Rasterizes any PDF page that has manual redactions. Redacted regions are destroyed at the pixel level rather than covered by an overlay that could be lifted. Redactions can be solid, blur, or pixelate (solid is safest).
-- Neutralizes PDF metadata (author, subject, keywords, creation and modification dates), and strips image metadata by canvas re-encode.
+- Neutralizes PDF metadata (author, subject, keywords, creation and modification dates), drops the XMP metadata stream so edit history, application traces, and stable document IDs do not survive, and strips image metadata by canvas re-encode.
 - Detects a digital signature in the source PDF and warns before creating a copy that would invalidate it.
 - Auto-detects common document types (DNI, passport, contract, payslip, invoice, financial) from filename, PDF text, and page dimensions, then recommends a protection level and suggests context-appropriate purposes.
 - Saves the recipient + purpose + level combos you use often as local presets. Nothing leaves the browser. A "Delete all local settings" action wipes them along with your theme and language preferences.
@@ -75,8 +75,6 @@ Rough shape of what is planned. Nothing here is a commitment; priorities move as
 **Near term**
 
 - Local OCR for image documents so photos of IDs, passports, and driving licences get the same content-based detection PDFs already do. First pass will target Spanish and English via a bundled, offline engine.
-- On-demand PDF rendering so documents with more than the current 20-page preview cap open without truncation.
-- XMP metadata scrubbing on PDFs to close the current Info-dict-only limitation.
 - First-run onboarding for people who land on the app cold.
 - Batch protection of multiple files with a single recipient / purpose combo.
 

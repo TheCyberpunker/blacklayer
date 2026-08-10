@@ -2,7 +2,7 @@
 // Builds a synthetic 2-page PDF in memory, runs it through the watermark pipeline,
 // re-parses the output, and asserts what we expect: same page count, page sizes preserved,
 // each page's content stream now contains watermark text.
-import { PDFDocument, StandardFonts, PDFName } from 'pdf-lib'
+import { PDFDocument, StandardFonts, PDFName, PDFHexString } from 'pdf-lib'
 import { applyPdfWatermark } from '../src/core/pdf/watermark.ts'
 import { profileFor } from '../src/core/types.ts'
 import { writeFile } from 'node:fs/promises'
@@ -21,6 +21,25 @@ async function buildSample() {
   const p2 = pdf.addPage([842, 595]) // A4 landscape
   p2.drawText('Second page landscape', { x: 60, y: 540, size: 18, font })
   p2.drawText('Page 2 of 2', { x: 60, y: 60, size: 10, font })
+
+  // Seed an XMP metadata stream on the catalog so we can assert it gets scrubbed.
+  const xmpBody =
+    `<?xpacket begin="﻿" id="W5M0MpCehiHzreSzNTczkc9d"?>` +
+    `<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#">` +
+    `<rdf:Description xmlns:xmp="http://ns.adobe.com/xap/1.0/" xmp:CreatorTool="SampleAppLeak"/>` +
+    `<rdf:Description xmlns:xmpMM="http://ns.adobe.com/xap/1.0/mm/" xmpMM:DocumentID="uuid:LEAKY-DOC-ID"/>` +
+    `</rdf:RDF></x:xmpmeta><?xpacket end="w"?>`
+  const xmpBytes = new TextEncoder().encode(xmpBody)
+  const xmpStream = pdf.context.stream(xmpBytes, {
+    Type: PDFName.of('Metadata'),
+    Subtype: PDFName.of('XML'),
+    Length: xmpBytes.byteLength,
+  })
+  const xmpRef = pdf.context.register(xmpStream)
+  pdf.catalog.set(PDFName.of('Metadata'), xmpRef)
+  // Silence unused import warning for PDFHexString until we need it.
+  void PDFHexString
+
   return await pdf.save()
 }
 
@@ -85,6 +104,15 @@ async function main() {
   assert(title === '', `title not neutralized: "${title}"`)
   assert(author === '', `author not neutralized: "${author}"`)
   assert(producer === 'BlackLayer', `producer not branded: "${producer}"`)
+
+  // Source had an XMP /Metadata entry; the neutralize path must drop it.
+  const catalogMetadata = roundtrip.catalog.get(PDFName.of('Metadata'))
+  assert(!catalogMetadata, 'XMP /Metadata entry survived the neutralize pass')
+
+  // And no XMP leak strings should be present in the raw output bytes.
+  const rawOut = new TextDecoder('latin1').decode(out)
+  assert(!rawOut.includes('SampleAppLeak'), 'xmp:CreatorTool leaked into output')
+  assert(!rawOut.includes('LEAKY-DOC-ID'), 'xmpMM:DocumentID leaked into output')
 
   console.log('artifacts:')
   console.log(`  scripts/out/sample-original.pdf`)
