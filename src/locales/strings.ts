@@ -40,6 +40,14 @@ export interface Strings {
     signatureWarning: string
     protect: string
     working: string
+    redactSectionTitle: string
+    redactHint: string
+    redactStart: string
+    redactStop: string
+    redactUndo: string
+    redactClear: string
+    redactCount: (n: number) => string
+    redactPdfLimitation: string
   }
   result: {
     ready: string
@@ -52,6 +60,7 @@ export interface Strings {
     appliedTiled: string
     appliedSingle: string
     appliedMetadata: string
+    appliedRedactions: (n: number) => string
     appliedLocalOnly: string
   }
   errors: {
@@ -107,6 +116,14 @@ export const enStrings: Strings = {
       'This PDF appears to contain a digital signature. Creating a protected copy will invalidate the original signature on the copy.',
     protect: 'Create protected copy',
     working: 'Preparing your copy…',
+    redactSectionTitle: 'Hide sensitive information',
+    redactHint: 'Draw over anything you do not want the recipient to see. Hidden areas are permanently removed on download.',
+    redactStart: 'Start hiding',
+    redactStop: 'Done hiding',
+    redactUndo: 'Undo last',
+    redactClear: 'Clear all',
+    redactCount: (n) => `${n} region${n === 1 ? '' : 's'} hidden`,
+    redactPdfLimitation: 'This PDF preview shows page 1. Hidden regions on other pages are not supported yet.',
   },
   result: {
     ready: 'Your protected copy is ready',
@@ -119,6 +136,7 @@ export const enStrings: Strings = {
     appliedTiled: 'Repeated watermark across every page',
     appliedSingle: 'Watermark applied to every page',
     appliedMetadata: 'Hidden metadata removed',
+    appliedRedactions: (n) => `${n} region${n === 1 ? '' : 's'} permanently hidden`,
     appliedLocalOnly: 'Processed locally, nothing uploaded',
   },
   errors: {
@@ -174,6 +192,14 @@ export const esStrings: Strings = {
       'Este PDF parece contener una firma digital. Crear una copia protegida invalidará la firma original en la copia.',
     protect: 'Crear copia protegida',
     working: 'Preparando tu copia…',
+    redactSectionTitle: 'Ocultar información sensible',
+    redactHint: 'Dibuja sobre lo que no quieres que vea el destinatario. Las zonas ocultas se eliminan de forma permanente al descargar.',
+    redactStart: 'Empezar a ocultar',
+    redactStop: 'Terminar',
+    redactUndo: 'Deshacer',
+    redactClear: 'Borrar todo',
+    redactCount: (n) => `${n} zona${n === 1 ? '' : 's'} oculta${n === 1 ? '' : 's'}`,
+    redactPdfLimitation: 'La vista previa muestra la página 1. Ocultar zonas en otras páginas aún no está disponible.',
   },
   result: {
     ready: 'Tu copia protegida está lista',
@@ -186,6 +212,7 @@ export const esStrings: Strings = {
     appliedTiled: 'Marca repetida en todas las páginas',
     appliedSingle: 'Marca aplicada en todas las páginas',
     appliedMetadata: 'Información oculta eliminada',
+    appliedRedactions: (n) => `${n} zona${n === 1 ? '' : 's'} oculta${n === 1 ? '' : 's'} de forma permanente`,
     appliedLocalOnly: 'Procesado localmente, sin subidas',
   },
   errors: {

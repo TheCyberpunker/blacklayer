@@ -1,26 +1,56 @@
 import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib'
-import type { ProtectionProfile, WatermarkOptions } from '../types.ts'
+import type { ProtectionProfile, RedactionRect, WatermarkOptions } from '../types.ts'
 import { formatWatermarkLines } from '../types.ts'
 import { applyMetadataMode, hasDigitalSignature } from './metadata.ts'
+import { rasterizePageWithRedactions } from './rasterize-page.ts'
 
 export interface ApplyPdfWatermarkArgs {
   source: ArrayBuffer
   profile: ProtectionProfile
   lang: 'en' | 'es'
+  /**
+   * Redactions to bake into the output. Keyed by 0-based page index.
+   * A page with any redactions is rasterized via pdfjs and re-embedded, which
+   * destroys the underlying text and vector data for that page.
+   */
+  redactionsByPage?: ReadonlyMap<number, readonly RedactionRect[]>
 }
 
 export interface ApplyPdfWatermarkResult {
   bytes: Uint8Array
   hadDigitalSignature: boolean
+  rasterizedPages: readonly number[]
 }
 
 export async function applyPdfWatermark({
   source,
   profile,
   lang,
+  redactionsByPage,
 }: ApplyPdfWatermarkArgs): Promise<ApplyPdfWatermarkResult> {
   const pdf = await PDFDocument.load(source, { ignoreEncryption: false, updateMetadata: false })
   const hadSignature = hasDigitalSignature(pdf)
+  const rasterized: number[] = []
+
+  if (redactionsByPage && redactionsByPage.size) {
+    // Rasterize each affected page: insert a replacement image page at the same
+    // index, then delete the original that shifted one to the right.
+    // Process indices in descending order so earlier indices stay valid.
+    const indices = Array.from(redactionsByPage.keys()).sort((a, b) => b - a)
+    for (const idx of indices) {
+      const rects = redactionsByPage.get(idx) ?? []
+      if (!rects.length) continue
+      await rasterizePageWithRedactions({
+        sourceBytes: source,
+        sourcePageIndex: idx,
+        targetDoc: pdf,
+        insertIndex: idx,
+        redactions: rects,
+      })
+      pdf.removePage(idx + 1)
+      rasterized.push(idx)
+    }
+  }
 
   const font = await pdf.embedFont(StandardFonts.HelveticaBold)
   const options = profile.watermark
@@ -33,7 +63,6 @@ export async function applyPdfWatermark({
   const pages = pdf.getPages()
   for (const page of pages) {
     const { width, height } = page.getSize()
-
     if (options.tile) {
       const stepX = Math.max(120, options.tileGapX)
       const stepY = Math.max(120, options.tileGapY)
@@ -51,7 +80,7 @@ export async function applyPdfWatermark({
   applyMetadataMode(pdf, profile.metadata)
 
   const bytes = await pdf.save()
-  return { bytes, hadDigitalSignature: hadSignature }
+  return { bytes, hadDigitalSignature: hadSignature, rasterizedPages: rasterized.sort((a, b) => a - b) }
 }
 
 function drawBlock(
@@ -81,10 +110,6 @@ function drawBlock(
   })
 }
 
-/**
- * Inspect a PDF for a digital signature without applying any protection.
- * Used by the UI to warn the user before they trigger the export.
- */
 export async function inspectPdf(source: ArrayBuffer): Promise<{ hasSignature: boolean; pageCount: number }> {
   const pdf = await PDFDocument.load(source, { ignoreEncryption: false, updateMetadata: false })
   return {

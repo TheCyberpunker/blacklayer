@@ -1,26 +1,28 @@
-import type { ProtectionProfile } from '../types.ts'
+import type { ProtectionProfile, RedactionRect } from '../types.ts'
 import { formatWatermarkLines } from '../types.ts'
+import { applyRedactionsToCanvas } from '../redact/apply.ts'
 
 export interface ApplyImageWatermarkArgs {
   source: Blob
   profile: ProtectionProfile
   lang: 'en' | 'es'
+  redactions?: readonly RedactionRect[]
   outputType?: 'image/png' | 'image/jpeg' | 'image/webp'
   quality?: number
 }
 
 /**
- * Draw the watermark onto a canvas seeded with the source image, then re-encode.
- *
- * Metadata handling: canvas.toBlob() re-encodes pixel data only and does not
- * carry EXIF/XMP/IPTC through. That means "neutralize" and "preserve" produce
- * the same output for images through this path. When we add a preserve-metadata
- * variant, we'll need to re-inject fields from a piexifjs read of the original.
+ * Draw redactions, then watermark, then re-encode. Redactions are destructive
+ * because canvas.toBlob() writes fresh pixel data. EXIF/GPS/IPTC do not survive
+ * the re-encode. That means "preserve metadata" for images is effectively equal
+ * to "neutralize" through this path; when preserve mode matters, we will need a
+ * piexifjs re-injection step around this function.
  */
 export async function applyImageWatermark({
   source,
   profile,
   lang,
+  redactions,
   outputType = 'image/png',
   quality = 0.92,
 }: ApplyImageWatermarkArgs): Promise<Blob> {
@@ -34,6 +36,10 @@ export async function applyImageWatermark({
 
   ctx.drawImage(bitmap, 0, 0)
   bitmap.close?.()
+
+  if (redactions?.length) {
+    applyRedactionsToCanvas(ctx, redactions, canvas.width, canvas.height)
+  }
 
   const options = profile.watermark
   const lines = formatWatermarkLines(options.text, lang)

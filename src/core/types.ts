@@ -1,6 +1,18 @@
 export type ProtectionLevel = 'basic' | 'recommended' | 'maximum'
 export type MetadataMode = 'preserve' | 'neutralize'
 
+/**
+ * Redaction rectangle in normalized coordinates relative to the rendered base.
+ * x, y, w, h are all in [0, 1]. Multiply by base intrinsic dimensions to draw.
+ */
+export interface RedactionRect {
+  id: string
+  x: number
+  y: number
+  w: number
+  h: number
+}
+
 export interface WatermarkText {
   recipient: string
   purpose: string

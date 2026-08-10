@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
+  Check,
   Download,
+  Eraser,
   FileText,
   ImageIcon,
   Languages,
@@ -9,12 +11,13 @@ import {
   Moon,
   Shield,
   Sun,
+  Undo2,
   Upload,
   X,
 } from 'lucide-react'
 import { applyPdfWatermark, inspectPdf } from './core/pdf/watermark.ts'
 import { applyImageWatermark } from './core/image/watermark.ts'
-import { profileFor, type ProtectionLevel } from './core/types.ts'
+import { profileFor, type ProtectionLevel, type RedactionRect } from './core/types.ts'
 import { renderBase, type RenderedBase } from './core/preview/render.ts'
 import { composite } from './core/preview/composite.ts'
 import { Button } from './components/ui/button.tsx'
@@ -41,6 +44,7 @@ type LoadedFile = {
 
 const ACCEPT = 'application/pdf,image/jpeg,image/png,image/webp'
 const LEVELS: ProtectionLevel[] = ['basic', 'recommended', 'maximum']
+const MIN_RECT = 0.008 // 0.8% of the base dimension
 
 const detectKind = (file: File): 'pdf' | 'image' | null => {
   const t = file.type.toLowerCase()
@@ -62,6 +66,11 @@ const todayIso = (): string => {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
 }
 
+const nextId = (): string =>
+  typeof crypto !== 'undefined' && 'randomUUID' in crypto
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.floor(Math.random() * 1e9)}`
+
 export function App(): JSX.Element {
   const { lang, setLang } = useLang()
   const { theme, setTheme } = useTheme()
@@ -72,6 +81,9 @@ export function App(): JSX.Element {
   const [recipient, setRecipient] = useState('')
   const [purpose, setPurpose] = useState('')
   const [level, setLevel] = useState<ProtectionLevel>('recommended')
+  const [redactions, setRedactions] = useState<RedactionRect[]>([])
+  const [redactMode, setRedactMode] = useState(false)
+  const [activeRect, setActiveRect] = useState<RedactionRect | null>(null)
   const [dragActive, setDragActive] = useState(false)
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -79,6 +91,7 @@ export function App(): JSX.Element {
   const [outputName, setOutputName] = useState<string>('')
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const dragStartRef = useRef<{ x: number; y: number } | null>(null)
   const debouncedRecipient = useDebounced(recipient, 80)
   const debouncedPurpose = useDebounced(purpose, 80)
 
@@ -95,8 +108,15 @@ export function App(): JSX.Element {
   // Live redraw on any relevant change.
   useEffect(() => {
     if (!loaded || !canvasRef.current) return
-    composite({ target: canvasRef.current, base: loaded.base, options: previewProfile.watermark, lang })
-  }, [loaded, previewProfile, lang])
+    composite({
+      target: canvasRef.current,
+      base: loaded.base,
+      options: previewProfile.watermark,
+      lang,
+      redactions,
+      activeRect,
+    })
+  }, [loaded, previewProfile, lang, redactions, activeRect])
 
   const clearOutput = useCallback(() => {
     setOutputUrl((prev) => {
@@ -126,10 +146,12 @@ export function App(): JSX.Element {
             const info = await inspectPdf(await f.arrayBuffer())
             hasSignature = info.hasSignature
           } catch {
-            // best-effort; missing signature detection is not fatal
+            // best-effort
           }
         }
         setLoaded({ file: f, kind, base, hasSignature })
+        setRedactions([])
+        setRedactMode(false)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         setError(`${t.errors.failed}: ${msg}`)
@@ -146,6 +168,8 @@ export function App(): JSX.Element {
     setRecipient('')
     setPurpose('')
     setLevel('recommended')
+    setRedactions([])
+    setRedactMode(false)
     clearOutput()
     setError(null)
   }, [loaded, clearOutput])
@@ -163,7 +187,14 @@ export function App(): JSX.Element {
       let blob: Blob
       if (loaded.kind === 'pdf') {
         const buf = await loaded.file.arrayBuffer()
-        const { bytes } = await applyPdfWatermark({ source: buf, profile, lang })
+        const redactionsByPage =
+          redactions.length > 0 ? new Map<number, readonly RedactionRect[]>([[0, redactions]]) : undefined
+        const { bytes } = await applyPdfWatermark({
+          source: buf,
+          profile,
+          lang,
+          redactionsByPage,
+        })
         blob = new Blob([bytes as unknown as ArrayBuffer], { type: 'application/pdf' })
       } else {
         const outType =
@@ -176,6 +207,7 @@ export function App(): JSX.Element {
           source: loaded.file,
           profile,
           lang,
+          redactions,
           outputType: outType,
         })
       }
@@ -189,7 +221,7 @@ export function App(): JSX.Element {
     } finally {
       setWorking(false)
     }
-  }, [loaded, level, recipient, purpose, lang, t, clearOutput])
+  }, [loaded, level, recipient, purpose, lang, redactions, t, clearOutput])
 
   const onDrop = useCallback(
     (e: React.DragEvent<HTMLElement>) => {
@@ -205,17 +237,81 @@ export function App(): JSX.Element {
     setDragActive(true)
   }, [])
 
+  // ---------- Redaction pointer handlers ----------
+
+  const canvasToNormalized = useCallback(
+    (clientX: number, clientY: number): { x: number; y: number } | null => {
+      const canvas = canvasRef.current
+      if (!canvas) return null
+      const rect = canvas.getBoundingClientRect()
+      const x = (clientX - rect.left) / rect.width
+      const y = (clientY - rect.top) / rect.height
+      return {
+        x: Math.max(0, Math.min(1, x)),
+        y: Math.max(0, Math.min(1, y)),
+      }
+    },
+    [],
+  )
+
+  const onPointerDown = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (!redactMode || !loaded) return
+      e.preventDefault()
+      ;(e.target as Element).setPointerCapture?.(e.pointerId)
+      const p = canvasToNormalized(e.clientX, e.clientY)
+      if (!p) return
+      dragStartRef.current = p
+      setActiveRect({ id: 'active', x: p.x, y: p.y, w: 0, h: 0 })
+    },
+    [redactMode, loaded, canvasToNormalized],
+  )
+
+  const onPointerMove = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (!redactMode || !dragStartRef.current) return
+      const p = canvasToNormalized(e.clientX, e.clientY)
+      if (!p) return
+      const start = dragStartRef.current
+      setActiveRect({
+        id: 'active',
+        x: Math.min(start.x, p.x),
+        y: Math.min(start.y, p.y),
+        w: Math.abs(p.x - start.x),
+        h: Math.abs(p.y - start.y),
+      })
+    },
+    [redactMode, canvasToNormalized],
+  )
+
+  const onPointerUp = useCallback(
+    (e: React.PointerEvent<HTMLCanvasElement>) => {
+      if (!redactMode) return
+      ;(e.target as Element).releasePointerCapture?.(e.pointerId)
+      const rect = activeRect
+      dragStartRef.current = null
+      setActiveRect(null)
+      if (!rect) return
+      if (rect.w < MIN_RECT || rect.h < MIN_RECT) return
+      setRedactions((prev) => [...prev, { ...rect, id: nextId() }])
+    },
+    [redactMode, activeRect],
+  )
+
+  const undoRedaction = useCallback(() => {
+    setRedactions((prev) => prev.slice(0, -1))
+  }, [])
+
+  const clearRedactions = useCallback(() => {
+    setRedactions([])
+    setActiveRect(null)
+  }, [])
+
   const canProtect = !!loaded && !!recipient.trim() && !!purpose.trim() && !working
 
   return (
     <div className="min-h-screen flex flex-col">
-      <Header
-        lang={lang}
-        onLangChange={setLang}
-        theme={theme}
-        onThemeChange={setTheme}
-        strings={t}
-      />
+      <Header lang={lang} onLangChange={setLang} theme={theme} onThemeChange={setTheme} strings={t} />
 
       <main className="flex-1 w-full max-w-6xl mx-auto px-6 pt-6 pb-16">
         {!loaded && !loading && (
@@ -257,6 +353,14 @@ export function App(): JSX.Element {
             error={error}
             strings={t}
             previewMetadataMode={previewProfile.metadata}
+            redactMode={redactMode}
+            onToggleRedactMode={() => setRedactMode((v) => !v)}
+            redactionsCount={redactions.length}
+            onUndoRedaction={undoRedaction}
+            onClearRedactions={clearRedactions}
+            onPointerDown={onPointerDown}
+            onPointerMove={onPointerMove}
+            onPointerUp={onPointerUp}
           />
         )}
       </main>
@@ -431,6 +535,14 @@ interface WorkspaceProps {
   error: string | null
   strings: ReturnType<typeof getStrings>
   previewMetadataMode: 'preserve' | 'neutralize'
+  redactMode: boolean
+  onToggleRedactMode: () => void
+  redactionsCount: number
+  onUndoRedaction: () => void
+  onClearRedactions: () => void
+  onPointerDown: (e: React.PointerEvent<HTMLCanvasElement>) => void
+  onPointerMove: (e: React.PointerEvent<HTMLCanvasElement>) => void
+  onPointerUp: (e: React.PointerEvent<HTMLCanvasElement>) => void
 }
 
 function Workspace(props: WorkspaceProps): JSX.Element {
@@ -452,6 +564,14 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     error,
     strings,
     previewMetadataMode,
+    redactMode,
+    onToggleRedactMode,
+    redactionsCount,
+    onUndoRedaction,
+    onClearRedactions,
+    onPointerDown,
+    onPointerMove,
+    onPointerUp,
   } = props
 
   const sizeKb = (loaded.file.size / 1024).toFixed(1)
@@ -481,13 +601,33 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           </Button>
         </div>
 
-        <div className="rounded-xl border border-border bg-muted/30 p-3 sm:p-4">
+        <div
+          className={cn(
+            'rounded-xl border bg-muted/30 p-3 sm:p-4 transition-colors',
+            redactMode ? 'border-foreground/60' : 'border-border',
+          )}
+        >
           <div className="relative w-full aspect-[3/4] sm:aspect-auto sm:min-h-[520px] bg-white rounded-lg overflow-hidden shadow-sm">
-            <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-contain" />
+            <canvas
+              ref={canvasRef}
+              onPointerDown={onPointerDown}
+              onPointerMove={onPointerMove}
+              onPointerUp={onPointerUp}
+              onPointerCancel={onPointerUp}
+              className={cn(
+                'absolute inset-0 w-full h-full object-contain touch-none select-none',
+                redactMode ? 'cursor-crosshair' : '',
+              )}
+            />
+            {redactMode && (
+              <div className="pointer-events-none absolute top-2 left-2 rounded bg-black/70 text-white text-[10px] font-mono uppercase tracking-wider px-2 py-1">
+                {strings.workspace.redactSectionTitle}
+              </div>
+            )}
           </div>
           {loaded.kind === 'pdf' && loaded.base.pageCount > 1 && (
             <p className="mt-2 text-[11px] text-muted-foreground font-mono uppercase tracking-wider text-center">
-              page 1 preview · all {loaded.base.pageCount} pages get the watermark on download
+              page 1 preview · watermark applied to all {loaded.base.pageCount} pages on download
             </p>
           )}
         </div>
@@ -538,6 +678,64 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           )}
         </div>
 
+        {/* Redaction */}
+        <div className="space-y-2 pt-1 border-t border-border/60">
+          <div className="flex items-center justify-between pt-3">
+            <Label>{strings.workspace.redactSectionTitle}</Label>
+            {redactionsCount > 0 && (
+              <span className="text-[11px] font-mono text-muted-foreground">
+                {strings.workspace.redactCount(redactionsCount)}
+              </span>
+            )}
+          </div>
+          <div className="flex gap-2">
+            <Button
+              variant={redactMode ? 'default' : 'outline'}
+              size="sm"
+              onClick={onToggleRedactMode}
+              className="flex-1"
+            >
+              {redactMode ? (
+                <>
+                  <Check className="h-4 w-4" />
+                  {strings.workspace.redactStop}
+                </>
+              ) : (
+                <>
+                  <Eraser className="h-4 w-4" />
+                  {strings.workspace.redactStart}
+                </>
+              )}
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onUndoRedaction}
+              disabled={redactionsCount === 0}
+              aria-label={strings.workspace.redactUndo}
+              title={strings.workspace.redactUndo}
+            >
+              <Undo2 className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onClearRedactions}
+              disabled={redactionsCount === 0}
+            >
+              {strings.workspace.redactClear}
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            {redactMode ? strings.workspace.redactHint : ''}
+          </p>
+          {loaded.kind === 'pdf' && loaded.base.pageCount > 1 && (
+            <p className="text-[11px] text-muted-foreground/80 font-mono">
+              {strings.workspace.redactPdfLimitation}
+            </p>
+          )}
+        </div>
+
         {loaded.kind === 'pdf' && loaded.hasSignature && (
           <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 flex items-start gap-2 text-xs text-destructive">
             <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
@@ -577,6 +775,9 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               </AppliedItem>
               {previewMetadataMode === 'neutralize' && (
                 <AppliedItem>{strings.result.appliedMetadata}</AppliedItem>
+              )}
+              {redactionsCount > 0 && (
+                <AppliedItem>{strings.result.appliedRedactions(redactionsCount)}</AppliedItem>
               )}
               <AppliedItem>{strings.result.appliedLocalOnly}</AppliedItem>
             </ul>
