@@ -4,7 +4,7 @@
 // each page's content stream now contains watermark text.
 import { PDFDocument, StandardFonts, PDFName } from 'pdf-lib'
 import { applyPdfWatermark } from '../src/core/pdf/watermark.ts'
-import { defaultWatermarkOptions } from '../src/core/types.ts'
+import { profileFor } from '../src/core/types.ts'
 import { writeFile } from 'node:fs/promises'
 import { fileURLToPath } from 'node:url'
 import { dirname, join } from 'node:path'
@@ -32,27 +32,28 @@ async function main() {
   const sample = await buildSample()
   console.log(`sample: ${sample.byteLength} bytes`)
 
-  const options = defaultWatermarkOptions({
+  const profile = profileFor('recommended', {
     recipient: 'Hotel Test Madrid',
     purpose: 'Identity verification',
     date: '2026-08-10',
   })
 
   const t0 = performance.now()
-  const out = await applyPdfWatermark({
+  const { bytes: out, hadDigitalSignature } = await applyPdfWatermark({
     source: sample.buffer.slice(sample.byteOffset, sample.byteOffset + sample.byteLength),
-    options,
+    profile,
     lang: 'en',
   })
   const t1 = performance.now()
-  console.log(`protected: ${out.byteLength} bytes in ${(t1 - t0).toFixed(1)}ms`)
+  console.log(`protected: ${out.byteLength} bytes in ${(t1 - t0).toFixed(1)}ms (signature detected: ${hadDigitalSignature})`)
 
   // Write artifacts first so they exist even if a later assertion fails.
   await writeFile(join(outDir, 'sample-original.pdf'), sample)
   await writeFile(join(outDir, 'sample-protected.pdf'), out)
 
-  // Re-parse to check structure survived.
-  const roundtrip = await PDFDocument.load(out)
+  // Re-parse to check structure survived. Load with updateMetadata:false so pdf-lib
+  // doesn't stamp its own Producer on us during inspection.
+  const roundtrip = await PDFDocument.load(out, { updateMetadata: false })
   const pages = roundtrip.getPages()
   assert(pages.length === 2, `expected 2 pages, got ${pages.length}`)
 
@@ -72,6 +73,14 @@ async function main() {
     const font = res?.get(PDFName.of('Font'))
     assert(!!font, `page ${i}: no /Font resource dictionary`)
   }
+
+  // Metadata neutralize check: 'recommended' level should have wiped Author/Title.
+  const title = roundtrip.getTitle()
+  const author = roundtrip.getAuthor()
+  const producer = roundtrip.getProducer()
+  assert(title === '', `title not neutralized: "${title}"`)
+  assert(author === '', `author not neutralized: "${author}"`)
+  assert(producer === 'BlackLayer', `producer not branded: "${producer}"`)
 
   console.log('artifacts:')
   console.log(`  scripts/out/sample-original.pdf`)

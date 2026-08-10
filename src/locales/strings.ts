@@ -1,4 +1,5 @@
 import type { Lang } from '../hooks/use-lang.ts'
+import type { ProtectionLevel } from '../core/types.ts'
 
 export interface Strings {
   header: {
@@ -30,6 +31,13 @@ export interface Strings {
     recipientPh: string
     purpose: string
     purposePh: string
+    levelHeading: string
+    levelBasic: string
+    levelRecommended: string
+    levelMaximum: string
+    levelDescription: Record<ProtectionLevel, string>
+    metadataNoteRemoved: string
+    signatureWarning: string
     protect: string
     working: string
   }
@@ -39,10 +47,11 @@ export interface Strings {
     download: string
     protectAnother: string
     originalNote: string
-    appliedTitle: string
     appliedRecipient: string
     appliedPurpose: string
     appliedTiled: string
+    appliedSingle: string
+    appliedMetadata: string
     appliedLocalOnly: string
   }
   errors: {
@@ -79,24 +88,37 @@ export const enStrings: Strings = {
     fileSize: (kb) => `${kb} KB`,
     clear: 'Clear document',
     protectionTitle: 'Prepare your protected copy',
-    protectionHelper: 'Tell us who this copy is for and why. We add a repeated watermark bound to those answers.',
+    protectionHelper: 'Tell us who this copy is for and why. Preview updates as you type.',
     recipient: 'Who is this copy for?',
     recipientPh: 'Hotel, lawyer, landlord, company…',
     purpose: 'Why are you sharing it?',
     purposePh: 'Identity verification, hotel check-in…',
+    levelHeading: 'Protection level',
+    levelBasic: 'Basic',
+    levelRecommended: 'Recommended',
+    levelMaximum: 'Maximum',
+    levelDescription: {
+      basic: 'A single visible mark showing who this copy is intended for.',
+      recommended: 'Repeated watermark plus hidden metadata removed.',
+      maximum: 'Denser watermark and hidden metadata removed.',
+    },
+    metadataNoteRemoved: 'Hidden metadata will be removed.',
+    signatureWarning:
+      'This PDF appears to contain a digital signature. Creating a protected copy will invalidate the original signature on the copy.',
     protect: 'Create protected copy',
     working: 'Preparing your copy…',
   },
   result: {
     ready: 'Your protected copy is ready',
-    readySub: 'Preview it below or download it now.',
+    readySub: 'Preview it above or download it now.',
     download: 'Download protected copy',
     protectAnother: 'Protect another document',
     originalNote: 'Your original document has not been changed.',
-    appliedTitle: 'Applied',
     appliedRecipient: 'Recipient included',
     appliedPurpose: 'Purpose included',
     appliedTiled: 'Repeated watermark across every page',
+    appliedSingle: 'Watermark applied to every page',
+    appliedMetadata: 'Hidden metadata removed',
     appliedLocalOnly: 'Processed locally, nothing uploaded',
   },
   errors: {
@@ -133,24 +155,37 @@ export const esStrings: Strings = {
     fileSize: (kb) => `${kb} KB`,
     clear: 'Descartar documento',
     protectionTitle: 'Prepara tu copia protegida',
-    protectionHelper: 'Indícanos para quién es esta copia y para qué. Añadimos una marca repetida vinculada a esas respuestas.',
+    protectionHelper: 'Indícanos para quién es esta copia y para qué. La vista previa se actualiza mientras escribes.',
     recipient: '¿Para quién es esta copia?',
     recipientPh: 'Hotel, abogado, arrendador, empresa…',
     purpose: '¿Para qué la vas a compartir?',
     purposePh: 'Verificación de identidad, registro en hotel…',
+    levelHeading: 'Nivel de protección',
+    levelBasic: 'Básica',
+    levelRecommended: 'Recomendada',
+    levelMaximum: 'Máxima',
+    levelDescription: {
+      basic: 'Una marca visible que indica para quién es esta copia.',
+      recommended: 'Marca repetida y eliminación de información oculta.',
+      maximum: 'Marca más densa y eliminación de información oculta.',
+    },
+    metadataNoteRemoved: 'Se eliminará la información oculta.',
+    signatureWarning:
+      'Este PDF parece contener una firma digital. Crear una copia protegida invalidará la firma original en la copia.',
     protect: 'Crear copia protegida',
     working: 'Preparando tu copia…',
   },
   result: {
     ready: 'Tu copia protegida está lista',
-    readySub: 'Previsualízala abajo o descárgala ahora.',
+    readySub: 'Previsualízala arriba o descárgala ahora.',
     download: 'Descargar copia protegida',
     protectAnother: 'Proteger otro documento',
     originalNote: 'El documento original no ha sido modificado.',
-    appliedTitle: 'Aplicado',
     appliedRecipient: 'Destinatario incluido',
     appliedPurpose: 'Motivo incluido',
     appliedTiled: 'Marca repetida en todas las páginas',
+    appliedSingle: 'Marca aplicada en todas las páginas',
+    appliedMetadata: 'Información oculta eliminada',
     appliedLocalOnly: 'Procesado localmente, sin subidas',
   },
   errors: {

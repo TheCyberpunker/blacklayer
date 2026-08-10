@@ -1,4 +1,5 @@
 export type ProtectionLevel = 'basic' | 'recommended' | 'maximum'
+export type MetadataMode = 'preserve' | 'neutralize'
 
 export interface WatermarkText {
   recipient: string
@@ -17,18 +18,70 @@ export interface WatermarkOptions {
   color: { r: number; g: number; b: number }
 }
 
-export const defaultWatermarkOptions = (text: WatermarkText): WatermarkOptions => ({
-  text,
-  opacity: 0.25,
-  rotationDeg: -30,
-  fontSize: 42,
-  tile: true,
-  tileGapX: 240,
-  tileGapY: 180,
-  color: { r: 0.1, g: 0.1, b: 0.1 },
-})
+export interface ProtectionProfile {
+  level: ProtectionLevel
+  watermark: WatermarkOptions
+  metadata: MetadataMode
+}
 
-export const formatWatermarkLines = (text: WatermarkText, lang: 'en' | 'es'): string[] => {
+const BASE_COLOR = { r: 0.1, g: 0.1, b: 0.1 }
+
+export function profileFor(level: ProtectionLevel, text: WatermarkText): ProtectionProfile {
+  switch (level) {
+    case 'basic':
+      return {
+        level,
+        watermark: {
+          text,
+          opacity: 0.16,
+          rotationDeg: -30,
+          fontSize: 46,
+          tile: false,
+          tileGapX: 320,
+          tileGapY: 240,
+          color: BASE_COLOR,
+        },
+        metadata: 'preserve',
+      }
+    case 'recommended':
+      return {
+        level,
+        watermark: {
+          text,
+          opacity: 0.22,
+          rotationDeg: -30,
+          fontSize: 40,
+          tile: true,
+          tileGapX: 280,
+          tileGapY: 210,
+          color: BASE_COLOR,
+        },
+        metadata: 'neutralize',
+      }
+    case 'maximum':
+      return {
+        level,
+        watermark: {
+          text,
+          opacity: 0.3,
+          rotationDeg: -30,
+          fontSize: 36,
+          tile: true,
+          tileGapX: 210,
+          tileGapY: 170,
+          color: BASE_COLOR,
+        },
+        metadata: 'neutralize',
+      }
+  }
+}
+
+/** Kept for the smoke test and any legacy callers. Wraps profileFor('recommended'). */
+export function defaultWatermarkOptions(text: WatermarkText): WatermarkOptions {
+  return profileFor('recommended', text).watermark
+}
+
+export function formatWatermarkLines(text: WatermarkText, lang: 'en' | 'es'): string[] {
   if (lang === 'es') {
     return [
       `COPIA PARA ${text.recipient.toUpperCase()}`,

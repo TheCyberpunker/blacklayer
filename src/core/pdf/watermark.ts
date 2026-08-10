@@ -1,16 +1,29 @@
 import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib'
-import type { WatermarkOptions } from '../types.ts'
+import type { ProtectionProfile, WatermarkOptions } from '../types.ts'
 import { formatWatermarkLines } from '../types.ts'
+import { applyMetadataMode, hasDigitalSignature } from './metadata.ts'
 
 export interface ApplyPdfWatermarkArgs {
   source: ArrayBuffer
-  options: WatermarkOptions
+  profile: ProtectionProfile
   lang: 'en' | 'es'
 }
 
-export async function applyPdfWatermark({ source, options, lang }: ApplyPdfWatermarkArgs): Promise<Uint8Array> {
-  const pdf = await PDFDocument.load(source, { ignoreEncryption: false })
+export interface ApplyPdfWatermarkResult {
+  bytes: Uint8Array
+  hadDigitalSignature: boolean
+}
+
+export async function applyPdfWatermark({
+  source,
+  profile,
+  lang,
+}: ApplyPdfWatermarkArgs): Promise<ApplyPdfWatermarkResult> {
+  const pdf = await PDFDocument.load(source, { ignoreEncryption: false, updateMetadata: false })
+  const hadSignature = hasDigitalSignature(pdf)
+
   const font = await pdf.embedFont(StandardFonts.HelveticaBold)
+  const options = profile.watermark
   const lines = formatWatermarkLines(options.text, lang)
   const { r, g, b } = options.color
   const color = rgb(r, g, b)
@@ -35,7 +48,10 @@ export async function applyPdfWatermark({ source, options, lang }: ApplyPdfWater
     }
   }
 
-  return await pdf.save()
+  applyMetadataMode(pdf, profile.metadata)
+
+  const bytes = await pdf.save()
+  return { bytes, hadDigitalSignature: hadSignature }
 }
 
 function drawBlock(
@@ -63,4 +79,16 @@ function drawBlock(
       rotate: rot,
     })
   })
+}
+
+/**
+ * Inspect a PDF for a digital signature without applying any protection.
+ * Used by the UI to warn the user before they trigger the export.
+ */
+export async function inspectPdf(source: ArrayBuffer): Promise<{ hasSignature: boolean; pageCount: number }> {
+  const pdf = await PDFDocument.load(source, { ignoreEncryption: false, updateMetadata: false })
+  return {
+    hasSignature: hasDigitalSignature(pdf),
+    pageCount: pdf.getPageCount(),
+  }
 }

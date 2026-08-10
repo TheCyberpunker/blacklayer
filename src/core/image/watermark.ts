@@ -1,17 +1,25 @@
-import type { WatermarkOptions } from '../types.ts'
+import type { ProtectionProfile } from '../types.ts'
 import { formatWatermarkLines } from '../types.ts'
 
 export interface ApplyImageWatermarkArgs {
   source: Blob
-  options: WatermarkOptions
+  profile: ProtectionProfile
   lang: 'en' | 'es'
   outputType?: 'image/png' | 'image/jpeg' | 'image/webp'
   quality?: number
 }
 
+/**
+ * Draw the watermark onto a canvas seeded with the source image, then re-encode.
+ *
+ * Metadata handling: canvas.toBlob() re-encodes pixel data only and does not
+ * carry EXIF/XMP/IPTC through. That means "neutralize" and "preserve" produce
+ * the same output for images through this path. When we add a preserve-metadata
+ * variant, we'll need to re-inject fields from a piexifjs read of the original.
+ */
 export async function applyImageWatermark({
   source,
-  options,
+  profile,
   lang,
   outputType = 'image/png',
   quality = 0.92,
@@ -27,13 +35,14 @@ export async function applyImageWatermark({
   ctx.drawImage(bitmap, 0, 0)
   bitmap.close?.()
 
+  const options = profile.watermark
   const lines = formatWatermarkLines(options.text, lang)
   const scaleFactor = Math.min(canvas.width, canvas.height) / 800
   const fontSize = Math.max(18, Math.round(options.fontSize * scaleFactor))
   const lineHeight = fontSize * 1.2
 
   ctx.save()
-  ctx.font = `bold ${fontSize}px system-ui, sans-serif`
+  ctx.font = `bold ${fontSize}px Inter, system-ui, sans-serif`
   ctx.fillStyle = `rgba(${Math.round(options.color.r * 255)}, ${Math.round(options.color.g * 255)}, ${Math.round(options.color.b * 255)}, ${options.opacity})`
   ctx.textAlign = 'center'
   ctx.textBaseline = 'middle'

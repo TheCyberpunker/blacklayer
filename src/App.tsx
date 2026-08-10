@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  AlertTriangle,
   Download,
   FileText,
   ImageIcon,
@@ -11,9 +12,9 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { applyPdfWatermark } from './core/pdf/watermark.ts'
+import { applyPdfWatermark, inspectPdf } from './core/pdf/watermark.ts'
 import { applyImageWatermark } from './core/image/watermark.ts'
-import { defaultWatermarkOptions } from './core/types.ts'
+import { profileFor, type ProtectionLevel } from './core/types.ts'
 import { renderBase, type RenderedBase } from './core/preview/render.ts'
 import { composite } from './core/preview/composite.ts'
 import { Button } from './components/ui/button.tsx'
@@ -35,9 +36,11 @@ type LoadedFile = {
   file: File
   kind: 'pdf' | 'image'
   base: RenderedBase
+  hasSignature: boolean
 }
 
 const ACCEPT = 'application/pdf,image/jpeg,image/png,image/webp'
+const LEVELS: ProtectionLevel[] = ['basic', 'recommended', 'maximum']
 
 const detectKind = (file: File): 'pdf' | 'image' | null => {
   const t = file.type.toLowerCase()
@@ -68,6 +71,7 @@ export function App(): JSX.Element {
   const [loaded, setLoaded] = useState<LoadedFile | null>(null)
   const [recipient, setRecipient] = useState('')
   const [purpose, setPurpose] = useState('')
+  const [level, setLevel] = useState<ProtectionLevel>('recommended')
   const [dragActive, setDragActive] = useState(false)
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -78,21 +82,21 @@ export function App(): JSX.Element {
   const debouncedRecipient = useDebounced(recipient, 80)
   const debouncedPurpose = useDebounced(purpose, 80)
 
-  const options = useMemo(
+  const previewProfile = useMemo(
     () =>
-      defaultWatermarkOptions({
+      profileFor(level, {
         recipient: debouncedRecipient.trim() || (lang === 'es' ? 'DESTINATARIO' : 'RECIPIENT'),
         purpose: debouncedPurpose.trim() || (lang === 'es' ? 'MOTIVO' : 'PURPOSE'),
         date: todayIso(),
       }),
-    [debouncedRecipient, debouncedPurpose, lang],
+    [level, debouncedRecipient, debouncedPurpose, lang],
   )
 
-  // Live redraw on every relevant change.
+  // Live redraw on any relevant change.
   useEffect(() => {
     if (!loaded || !canvasRef.current) return
-    composite({ target: canvasRef.current, base: loaded.base, options, lang })
-  }, [loaded, options, lang])
+    composite({ target: canvasRef.current, base: loaded.base, options: previewProfile.watermark, lang })
+  }, [loaded, previewProfile, lang])
 
   const clearOutput = useCallback(() => {
     setOutputUrl((prev) => {
@@ -116,7 +120,16 @@ export function App(): JSX.Element {
       setLoading(true)
       try {
         const base = await renderBase(f)
-        setLoaded({ file: f, kind, base })
+        let hasSignature = false
+        if (kind === 'pdf') {
+          try {
+            const info = await inspectPdf(await f.arrayBuffer())
+            hasSignature = info.hasSignature
+          } catch {
+            // best-effort; missing signature detection is not fatal
+          }
+        }
+        setLoaded({ file: f, kind, base, hasSignature })
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
         setError(`${t.errors.failed}: ${msg}`)
@@ -132,6 +145,7 @@ export function App(): JSX.Element {
     setLoaded(null)
     setRecipient('')
     setPurpose('')
+    setLevel('recommended')
     clearOutput()
     setError(null)
   }, [loaded, clearOutput])
@@ -141,7 +155,7 @@ export function App(): JSX.Element {
     setWorking(true)
     setError(null)
     try {
-      const realOptions = defaultWatermarkOptions({
+      const profile = profileFor(level, {
         recipient: recipient.trim() || (lang === 'es' ? 'DESTINATARIO' : 'RECIPIENT'),
         purpose: purpose.trim() || (lang === 'es' ? 'MOTIVO' : 'PURPOSE'),
         date: todayIso(),
@@ -149,7 +163,7 @@ export function App(): JSX.Element {
       let blob: Blob
       if (loaded.kind === 'pdf') {
         const buf = await loaded.file.arrayBuffer()
-        const bytes = await applyPdfWatermark({ source: buf, options: realOptions, lang })
+        const { bytes } = await applyPdfWatermark({ source: buf, profile, lang })
         blob = new Blob([bytes as unknown as ArrayBuffer], { type: 'application/pdf' })
       } else {
         const outType =
@@ -160,7 +174,7 @@ export function App(): JSX.Element {
               : 'image/png'
         blob = await applyImageWatermark({
           source: loaded.file,
-          options: realOptions,
+          profile,
           lang,
           outputType: outType,
         })
@@ -175,7 +189,7 @@ export function App(): JSX.Element {
     } finally {
       setWorking(false)
     }
-  }, [loaded, recipient, purpose, lang, t, clearOutput])
+  }, [loaded, level, recipient, purpose, lang, t, clearOutput])
 
   const onDrop = useCallback(
     (e: React.DragEvent<HTMLElement>) => {
@@ -230,6 +244,8 @@ export function App(): JSX.Element {
             canvasRef={canvasRef}
             recipient={recipient}
             purpose={purpose}
+            level={level}
+            onLevelChange={setLevel}
             onRecipient={setRecipient}
             onPurpose={setPurpose}
             onClear={clearDoc}
@@ -240,6 +256,7 @@ export function App(): JSX.Element {
             outputName={outputName}
             error={error}
             strings={t}
+            previewMetadataMode={previewProfile.metadata}
           />
         )}
       </main>
@@ -389,9 +406,7 @@ function HeroDrop({
         {strings.hero.privacy}
       </p>
 
-      {error && (
-        <p className="mt-6 text-sm text-destructive">{error}</p>
-      )}
+      {error && <p className="mt-6 text-sm text-destructive">{error}</p>}
     </div>
   )
 }
@@ -403,6 +418,8 @@ interface WorkspaceProps {
   canvasRef: React.RefObject<HTMLCanvasElement>
   recipient: string
   purpose: string
+  level: ProtectionLevel
+  onLevelChange: (l: ProtectionLevel) => void
   onRecipient: (v: string) => void
   onPurpose: (v: string) => void
   onClear: () => void
@@ -413,6 +430,7 @@ interface WorkspaceProps {
   outputName: string
   error: string | null
   strings: ReturnType<typeof getStrings>
+  previewMetadataMode: 'preserve' | 'neutralize'
 }
 
 function Workspace(props: WorkspaceProps): JSX.Element {
@@ -421,6 +439,8 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     canvasRef,
     recipient,
     purpose,
+    level,
+    onLevelChange,
     onRecipient,
     onPurpose,
     onClear,
@@ -431,27 +451,27 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     outputName,
     error,
     strings,
+    previewMetadataMode,
   } = props
 
   const sizeKb = (loaded.file.size / 1024).toFixed(1)
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_380px] gap-8 animate-fade-in">
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-8 animate-fade-in">
       {/* Preview */}
       <section className="min-w-0">
         <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2 text-sm">
+          <div className="flex items-center gap-2 text-sm min-w-0">
             {loaded.kind === 'pdf' ? (
-              <FileText className="h-4 w-4 text-muted-foreground" />
+              <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
             ) : (
-              <ImageIcon className="h-4 w-4 text-muted-foreground" />
+              <ImageIcon className="h-4 w-4 text-muted-foreground shrink-0" />
             )}
-            <span className="font-medium truncate max-w-xs" title={loaded.file.name}>
+            <span className="font-medium truncate" title={loaded.file.name}>
               {loaded.file.name}
             </span>
-            <span className="text-xs text-muted-foreground font-mono">
-              {loaded.kind === 'pdf' ? strings.workspace.pageCount(loaded.base.pageCount) : ''}
-              {loaded.kind === 'pdf' ? ' · ' : ''}
+            <span className="text-xs text-muted-foreground font-mono shrink-0">
+              {loaded.kind === 'pdf' ? `${strings.workspace.pageCount(loaded.base.pageCount)} · ` : ''}
               {strings.workspace.fileSize(sizeKb)}
             </span>
           </div>
@@ -463,21 +483,18 @@ function Workspace(props: WorkspaceProps): JSX.Element {
 
         <div className="rounded-xl border border-border bg-muted/30 p-3 sm:p-4">
           <div className="relative w-full aspect-[3/4] sm:aspect-auto sm:min-h-[520px] bg-white rounded-lg overflow-hidden shadow-sm">
-            <canvas
-              ref={canvasRef}
-              className="absolute inset-0 w-full h-full object-contain"
-            />
+            <canvas ref={canvasRef} className="absolute inset-0 w-full h-full object-contain" />
           </div>
           {loaded.kind === 'pdf' && loaded.base.pageCount > 1 && (
             <p className="mt-2 text-[11px] text-muted-foreground font-mono uppercase tracking-wider text-center">
-              {strings.workspace.documentLabel} · page 1 preview · all {loaded.base.pageCount} pages get the watermark on download
+              page 1 preview · all {loaded.base.pageCount} pages get the watermark on download
             </p>
           )}
         </div>
       </section>
 
       {/* Controls */}
-      <aside className="lg:sticky lg:top-20 lg:self-start space-y-5">
+      <aside className="lg:sticky lg:top-20 lg:self-start space-y-6">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">{strings.workspace.protectionTitle}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{strings.workspace.protectionHelper}</p>
@@ -508,12 +525,27 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           </div>
         </div>
 
-        <Button
-          onClick={onProtect}
-          disabled={!canProtect}
-          size="lg"
-          className="w-full"
-        >
+        <div className="space-y-2">
+          <Label>{strings.workspace.levelHeading}</Label>
+          <LevelPicker level={level} onChange={onLevelChange} strings={strings} />
+          <p className="text-xs text-muted-foreground pt-0.5">
+            {strings.workspace.levelDescription[level]}
+          </p>
+          {previewMetadataMode === 'neutralize' && (
+            <p className="text-xs text-muted-foreground/80 font-mono">
+              {strings.workspace.metadataNoteRemoved}
+            </p>
+          )}
+        </div>
+
+        {loaded.kind === 'pdf' && loaded.hasSignature && (
+          <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 flex items-start gap-2 text-xs text-destructive">
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
+            <span>{strings.workspace.signatureWarning}</span>
+          </div>
+        )}
+
+        <Button onClick={onProtect} disabled={!canProtect} size="lg" className="w-full">
           {working ? strings.workspace.working : strings.workspace.protect}
         </Button>
 
@@ -540,7 +572,12 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             <ul className="text-xs text-muted-foreground space-y-1 pt-1">
               <AppliedItem>{strings.result.appliedRecipient}</AppliedItem>
               <AppliedItem>{strings.result.appliedPurpose}</AppliedItem>
-              <AppliedItem>{strings.result.appliedTiled}</AppliedItem>
+              <AppliedItem>
+                {level === 'basic' ? strings.result.appliedSingle : strings.result.appliedTiled}
+              </AppliedItem>
+              {previewMetadataMode === 'neutralize' && (
+                <AppliedItem>{strings.result.appliedMetadata}</AppliedItem>
+              )}
               <AppliedItem>{strings.result.appliedLocalOnly}</AppliedItem>
             </ul>
             <p className="text-[11px] text-muted-foreground pt-1 border-t border-border/60">
@@ -553,10 +590,54 @@ function Workspace(props: WorkspaceProps): JSX.Element {
   )
 }
 
+function LevelPicker({
+  level,
+  onChange,
+  strings,
+}: {
+  level: ProtectionLevel
+  onChange: (l: ProtectionLevel) => void
+  strings: ReturnType<typeof getStrings>
+}): JSX.Element {
+  const labels: Record<ProtectionLevel, string> = {
+    basic: strings.workspace.levelBasic,
+    recommended: strings.workspace.levelRecommended,
+    maximum: strings.workspace.levelMaximum,
+  }
+  return (
+    <div
+      role="radiogroup"
+      aria-label={strings.workspace.levelHeading}
+      className="grid grid-cols-3 gap-1 p-1 rounded-md bg-muted"
+    >
+      {LEVELS.map((l) => {
+        const selected = l === level
+        return (
+          <button
+            key={l}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onChange(l)}
+            className={cn(
+              'h-8 text-xs font-medium rounded transition-colors',
+              selected
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {labels[l]}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 function AppliedItem({ children }: { children: React.ReactNode }): JSX.Element {
   return (
     <li className="flex items-start gap-2">
-      <span className="mt-1 h-1 w-1 rounded-full bg-foreground/60" />
+      <span className="mt-1 h-1 w-1 rounded-full bg-foreground/60 shrink-0" />
       <span>{children}</span>
     </li>
   )
