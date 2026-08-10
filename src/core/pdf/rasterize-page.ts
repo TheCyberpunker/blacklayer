@@ -1,5 +1,4 @@
 import { PDFDocument } from 'pdf-lib'
-import { ensurePdfjs } from '../preview/pdfjs.ts'
 import type { RedactionRect } from '../types.ts'
 import { applyRedactionsToCanvas } from '../redact/apply.ts'
 
@@ -28,6 +27,10 @@ export async function rasterizePageWithRedactions({
   redactions,
   dpi = 150,
 }: RasterizeArgs): Promise<void> {
+  // Lazy import so Node / non-browser callers of applyPdfWatermark (e.g. unit tests
+  // that never trigger redaction) do not pull in the pdfjs worker URL binding,
+  // which is a Vite-only import syntax.
+  const { ensurePdfjs } = await import('../preview/pdfjs.ts')
   const pdfjs = ensurePdfjs()
   const loadingTask = pdfjs.getDocument({ data: new Uint8Array(sourceBytes) })
   const doc = await loadingTask.promise

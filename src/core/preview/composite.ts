@@ -1,11 +1,11 @@
 import type { RedactionRect, WatermarkOptions } from '../types.ts'
 import { formatWatermarkLines } from '../types.ts'
 import type { Lang } from '../../hooks/use-lang.ts'
-import type { RenderedBase } from './render.ts'
+import type { RenderedPage } from './render.ts'
 
 export interface CompositeArgs {
   target: HTMLCanvasElement
-  base: RenderedBase
+  page: RenderedPage
   options: WatermarkOptions
   lang: Lang
   redactions?: readonly RedactionRect[]
@@ -13,13 +13,12 @@ export interface CompositeArgs {
 }
 
 /**
- * Draw base bitmap, then redaction fills, then watermark overlay onto target
- * canvas. Redactions sit under the watermark so the watermark is still legible
- * over hidden regions.
+ * Draw the given page's bitmap, then redaction fills, then watermark overlay
+ * onto the target canvas.
  */
 export function composite({
   target,
-  base,
+  page,
   options,
   lang,
   redactions,
@@ -28,14 +27,14 @@ export function composite({
   const ctx = target.getContext('2d', { alpha: false })
   if (!ctx) return
 
-  target.width = base.intrinsicWidth
-  target.height = base.intrinsicHeight
+  target.width = page.intrinsicWidth
+  target.height = page.intrinsicHeight
 
   ctx.imageSmoothingEnabled = true
   ctx.imageSmoothingQuality = 'high'
   ctx.fillStyle = '#ffffff'
   ctx.fillRect(0, 0, target.width, target.height)
-  ctx.drawImage(base.bitmap, 0, 0, target.width, target.height)
+  ctx.drawImage(page.bitmap, 0, 0, target.width, target.height)
 
   if (redactions && redactions.length) {
     drawRedactions(ctx, target.width, target.height, redactions, false)

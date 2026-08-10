@@ -15,10 +15,8 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { applyPdfWatermark, inspectPdf } from './core/pdf/watermark.ts'
-import { applyImageWatermark } from './core/image/watermark.ts'
 import { profileFor, type ProtectionLevel, type RedactionRect } from './core/types.ts'
-import { renderBase, type RenderedBase } from './core/preview/render.ts'
+import { releaseBase, type RenderedBase } from './core/preview/render.ts'
 import { composite } from './core/preview/composite.ts'
 import { Button } from './components/ui/button.tsx'
 import { Input } from './components/ui/input.tsx'
@@ -44,7 +42,7 @@ type LoadedFile = {
 
 const ACCEPT = 'application/pdf,image/jpeg,image/png,image/webp'
 const LEVELS: ProtectionLevel[] = ['basic', 'recommended', 'maximum']
-const MIN_RECT = 0.008 // 0.8% of the base dimension
+const MIN_RECT = 0.008
 
 const detectKind = (file: File): 'pdf' | 'image' | null => {
   const t = file.type.toLowerCase()
@@ -78,10 +76,11 @@ export function App(): JSX.Element {
 
   const [loading, setLoading] = useState(false)
   const [loaded, setLoaded] = useState<LoadedFile | null>(null)
+  const [activePageIndex, setActivePageIndex] = useState(0)
   const [recipient, setRecipient] = useState('')
   const [purpose, setPurpose] = useState('')
   const [level, setLevel] = useState<ProtectionLevel>('recommended')
-  const [redactions, setRedactions] = useState<RedactionRect[]>([])
+  const [redactionsByPage, setRedactionsByPage] = useState<Map<number, RedactionRect[]>>(new Map())
   const [redactMode, setRedactMode] = useState(false)
   const [activeRect, setActiveRect] = useState<RedactionRect | null>(null)
   const [dragActive, setDragActive] = useState(false)
@@ -105,18 +104,26 @@ export function App(): JSX.Element {
     [level, debouncedRecipient, debouncedPurpose, lang],
   )
 
+  const activePage = loaded?.base.pages[activePageIndex] ?? loaded?.base.pages[0]
+  const activePageRedactions = redactionsByPage.get(activePageIndex) ?? []
+  const totalRedactionsCount = useMemo(() => {
+    let n = 0
+    for (const arr of redactionsByPage.values()) n += arr.length
+    return n
+  }, [redactionsByPage])
+
   // Live redraw on any relevant change.
   useEffect(() => {
-    if (!loaded || !canvasRef.current) return
+    if (!loaded || !activePage || !canvasRef.current) return
     composite({
       target: canvasRef.current,
-      base: loaded.base,
+      page: activePage,
       options: previewProfile.watermark,
       lang,
-      redactions,
+      redactions: activePageRedactions,
       activeRect,
     })
-  }, [loaded, previewProfile, lang, redactions, activeRect])
+  }, [loaded, activePage, previewProfile, lang, activePageRedactions, activeRect])
 
   const clearOutput = useCallback(() => {
     setOutputUrl((prev) => {
@@ -139,10 +146,12 @@ export function App(): JSX.Element {
       }
       setLoading(true)
       try {
+        const { renderBase } = await import('./core/preview/render.ts')
         const base = await renderBase(f)
         let hasSignature = false
         if (kind === 'pdf') {
           try {
+            const { inspectPdf } = await import('./core/pdf/watermark.ts')
             const info = await inspectPdf(await f.arrayBuffer())
             hasSignature = info.hasSignature
           } catch {
@@ -150,7 +159,8 @@ export function App(): JSX.Element {
           }
         }
         setLoaded({ file: f, kind, base, hasSignature })
-        setRedactions([])
+        setActivePageIndex(0)
+        setRedactionsByPage(new Map())
         setRedactMode(false)
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err)
@@ -163,12 +173,13 @@ export function App(): JSX.Element {
   )
 
   const clearDoc = useCallback(() => {
-    if (loaded) loaded.base.bitmap.close?.()
+    releaseBase(loaded?.base)
     setLoaded(null)
+    setActivePageIndex(0)
     setRecipient('')
     setPurpose('')
     setLevel('recommended')
-    setRedactions([])
+    setRedactionsByPage(new Map())
     setRedactMode(false)
     clearOutput()
     setError(null)
@@ -187,13 +198,16 @@ export function App(): JSX.Element {
       let blob: Blob
       if (loaded.kind === 'pdf') {
         const buf = await loaded.file.arrayBuffer()
-        const redactionsByPage =
-          redactions.length > 0 ? new Map<number, readonly RedactionRect[]>([[0, redactions]]) : undefined
+        const activeMap = new Map<number, readonly RedactionRect[]>()
+        for (const [idx, arr] of redactionsByPage.entries()) {
+          if (arr.length) activeMap.set(idx, arr)
+        }
+        const { applyPdfWatermark } = await import('./core/pdf/watermark.ts')
         const { bytes } = await applyPdfWatermark({
           source: buf,
           profile,
           lang,
-          redactionsByPage,
+          redactionsByPage: activeMap.size ? activeMap : undefined,
         })
         blob = new Blob([bytes as unknown as ArrayBuffer], { type: 'application/pdf' })
       } else {
@@ -203,11 +217,13 @@ export function App(): JSX.Element {
             : loaded.file.type === 'image/webp'
               ? 'image/webp'
               : 'image/png'
+        const { applyImageWatermark } = await import('./core/image/watermark.ts')
+        const imageRects = redactionsByPage.get(0) ?? []
         blob = await applyImageWatermark({
           source: loaded.file,
           profile,
           lang,
-          redactions,
+          redactions: imageRects,
           outputType: outType,
         })
       }
@@ -221,7 +237,7 @@ export function App(): JSX.Element {
     } finally {
       setWorking(false)
     }
-  }, [loaded, level, recipient, purpose, lang, redactions, t, clearOutput])
+  }, [loaded, level, recipient, purpose, lang, redactionsByPage, t, clearOutput])
 
   const onDrop = useCallback(
     (e: React.DragEvent<HTMLElement>) => {
@@ -293,17 +309,31 @@ export function App(): JSX.Element {
       setActiveRect(null)
       if (!rect) return
       if (rect.w < MIN_RECT || rect.h < MIN_RECT) return
-      setRedactions((prev) => [...prev, { ...rect, id: nextId() }])
+      const finalRect: RedactionRect = { ...rect, id: nextId() }
+      setRedactionsByPage((prev) => {
+        const next = new Map(prev)
+        const arr = next.get(activePageIndex) ?? []
+        next.set(activePageIndex, [...arr, finalRect])
+        return next
+      })
     },
-    [redactMode, activeRect],
+    [redactMode, activeRect, activePageIndex],
   )
 
   const undoRedaction = useCallback(() => {
-    setRedactions((prev) => prev.slice(0, -1))
-  }, [])
+    setRedactionsByPage((prev) => {
+      const next = new Map(prev)
+      const arr = next.get(activePageIndex) ?? []
+      if (!arr.length) return prev
+      const trimmed = arr.slice(0, -1)
+      if (trimmed.length) next.set(activePageIndex, trimmed)
+      else next.delete(activePageIndex)
+      return next
+    })
+  }, [activePageIndex])
 
   const clearRedactions = useCallback(() => {
-    setRedactions([])
+    setRedactionsByPage(new Map())
     setActiveRect(null)
   }, [])
 
@@ -334,9 +364,15 @@ export function App(): JSX.Element {
           </div>
         )}
 
-        {loaded && !loading && (
+        {loaded && !loading && activePage && (
           <Workspace
             loaded={loaded}
+            activePage={activePage}
+            activePageIndex={activePageIndex}
+            onSelectPage={(i) => {
+              setActivePageIndex(i)
+              setActiveRect(null)
+            }}
             canvasRef={canvasRef}
             recipient={recipient}
             purpose={purpose}
@@ -355,7 +391,8 @@ export function App(): JSX.Element {
             previewMetadataMode={previewProfile.metadata}
             redactMode={redactMode}
             onToggleRedactMode={() => setRedactMode((v) => !v)}
-            redactionsCount={redactions.length}
+            redactionsCount={totalRedactionsCount}
+            activePageRedactionsCount={activePageRedactions.length}
             onUndoRedaction={undoRedaction}
             onClearRedactions={clearRedactions}
             onPointerDown={onPointerDown}
@@ -519,6 +556,9 @@ function HeroDrop({
 
 interface WorkspaceProps {
   loaded: LoadedFile
+  activePage: NonNullable<LoadedFile['base']['pages'][number]>
+  activePageIndex: number
+  onSelectPage: (i: number) => void
   canvasRef: React.RefObject<HTMLCanvasElement>
   recipient: string
   purpose: string
@@ -538,6 +578,7 @@ interface WorkspaceProps {
   redactMode: boolean
   onToggleRedactMode: () => void
   redactionsCount: number
+  activePageRedactionsCount: number
   onUndoRedaction: () => void
   onClearRedactions: () => void
   onPointerDown: (e: React.PointerEvent<HTMLCanvasElement>) => void
@@ -548,6 +589,8 @@ interface WorkspaceProps {
 function Workspace(props: WorkspaceProps): JSX.Element {
   const {
     loaded,
+    activePageIndex,
+    onSelectPage,
     canvasRef,
     recipient,
     purpose,
@@ -567,6 +610,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     redactMode,
     onToggleRedactMode,
     redactionsCount,
+    activePageRedactionsCount,
     onUndoRedaction,
     onClearRedactions,
     onPointerDown,
@@ -575,6 +619,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
   } = props
 
   const sizeKb = (loaded.file.size / 1024).toFixed(1)
+  const isMultiPage = loaded.base.totalPages > 1
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-8 animate-fade-in">
@@ -591,7 +636,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               {loaded.file.name}
             </span>
             <span className="text-xs text-muted-foreground font-mono shrink-0">
-              {loaded.kind === 'pdf' ? `${strings.workspace.pageCount(loaded.base.pageCount)} · ` : ''}
+              {loaded.kind === 'pdf' ? `${strings.workspace.pageCount(loaded.base.totalPages)} · ` : ''}
               {strings.workspace.fileSize(sizeKb)}
             </span>
           </div>
@@ -624,11 +669,21 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                 {strings.workspace.redactSectionTitle}
               </div>
             )}
+            {isMultiPage && (
+              <div className="pointer-events-none absolute top-2 right-2 rounded bg-black/70 text-white text-[10px] font-mono uppercase tracking-wider px-2 py-1">
+                {strings.workspace.pageStripCurrent(activePageIndex + 1, loaded.base.totalPages)}
+              </div>
+            )}
           </div>
-          {loaded.kind === 'pdf' && loaded.base.pageCount > 1 && (
-            <p className="mt-2 text-[11px] text-muted-foreground font-mono uppercase tracking-wider text-center">
-              page 1 preview · watermark applied to all {loaded.base.pageCount} pages on download
-            </p>
+
+          {isMultiPage && (
+            <PageStrip
+              loaded={loaded}
+              activePageIndex={activePageIndex}
+              onSelectPage={onSelectPage}
+              redactionsByPage={props}
+              strings={strings}
+            />
           )}
         </div>
       </section>
@@ -711,7 +766,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               variant="ghost"
               size="sm"
               onClick={onUndoRedaction}
-              disabled={redactionsCount === 0}
+              disabled={activePageRedactionsCount === 0}
               aria-label={strings.workspace.redactUndo}
               title={strings.workspace.redactUndo}
             >
@@ -729,7 +784,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           <p className="text-xs text-muted-foreground">
             {redactMode ? strings.workspace.redactHint : ''}
           </p>
-          {loaded.kind === 'pdf' && loaded.base.pageCount > 1 && (
+          {isMultiPage && (
             <p className="text-[11px] text-muted-foreground/80 font-mono">
               {strings.workspace.redactPdfLimitation}
             </p>
@@ -788,6 +843,109 @@ function Workspace(props: WorkspaceProps): JSX.Element {
         )}
       </aside>
     </div>
+  )
+}
+
+// ---------- Page strip ----------
+
+function PageStrip({
+  loaded,
+  activePageIndex,
+  onSelectPage,
+  redactionsByPage,
+  strings,
+}: {
+  loaded: LoadedFile
+  activePageIndex: number
+  onSelectPage: (i: number) => void
+  redactionsByPage: unknown // narrowed below via WorkspaceProps parent context
+  strings: ReturnType<typeof getStrings>
+}): JSX.Element {
+  // The parent passes the whole WorkspaceProps as `redactionsByPage` for convenience;
+  // we only read the total count via the existing indicators. For this strip we just
+  // mark pages that have any redactions.
+  void redactionsByPage
+  const pages = loaded.base.pages
+  const total = loaded.base.totalPages
+  const rendered = loaded.base.renderedPageCount
+  const showCappedNote = rendered < total
+
+  return (
+    <div className="mt-3 space-y-2">
+      <div
+        role="listbox"
+        aria-label={strings.workspace.pageStripLabel}
+        className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1"
+      >
+        {pages.map((p) => (
+          <PageThumb
+            key={p.index}
+            page={p}
+            selected={p.index === activePageIndex}
+            onSelect={() => onSelectPage(p.index)}
+          />
+        ))}
+      </div>
+      {showCappedNote && (
+        <p className="text-[11px] font-mono text-muted-foreground text-center">
+          {strings.workspace.pageStripCapped(rendered, total)}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function PageThumb({
+  page,
+  selected,
+  onSelect,
+}: {
+  page: LoadedFile['base']['pages'][number]
+  selected: boolean
+  onSelect: () => void
+}): JSX.Element {
+  const canvasRef = useRef<HTMLCanvasElement>(null)
+  useEffect(() => {
+    const c = canvasRef.current
+    if (!c) return
+    c.width = page.thumbnail.width
+    c.height = page.thumbnail.height
+    const ctx = c.getContext('2d', { alpha: false })
+    if (!ctx) return
+    ctx.fillStyle = '#ffffff'
+    ctx.fillRect(0, 0, c.width, c.height)
+    ctx.drawImage(page.thumbnail, 0, 0)
+  }, [page.thumbnail])
+
+  const aspect = page.thumbnail.width / page.thumbnail.height
+  const heightPx = 96
+  const widthPx = Math.max(48, Math.round(heightPx * aspect))
+
+  return (
+    <button
+      type="button"
+      role="option"
+      aria-selected={selected}
+      onClick={onSelect}
+      className={cn(
+        'shrink-0 rounded-md overflow-hidden border-2 transition-colors bg-white',
+        selected
+          ? 'border-foreground'
+          : 'border-border hover:border-foreground/40',
+      )}
+      style={{ width: widthPx, height: heightPx }}
+      title={`Page ${page.index + 1}`}
+    >
+      <canvas ref={canvasRef} className="w-full h-full object-contain" />
+      <span
+        className={cn(
+          'absolute -mt-5 ml-1 text-[10px] font-mono px-1 rounded',
+          selected ? 'bg-foreground text-background' : 'bg-black/60 text-white',
+        )}
+      >
+        {page.index + 1}
+      </span>
+    </button>
   )
 }
 

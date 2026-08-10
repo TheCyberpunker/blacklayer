@@ -48,6 +48,9 @@ export interface Strings {
     redactClear: string
     redactCount: (n: number) => string
     redactPdfLimitation: string
+    pageStripLabel: string
+    pageStripCapped: (rendered: number, total: number) => string
+    pageStripCurrent: (current: number, total: number) => string
   }
   result: {
     ready: string
@@ -123,7 +126,10 @@ export const enStrings: Strings = {
     redactUndo: 'Undo last',
     redactClear: 'Clear all',
     redactCount: (n) => `${n} region${n === 1 ? '' : 's'} hidden`,
-    redactPdfLimitation: 'This PDF preview shows page 1. Hidden regions on other pages are not supported yet.',
+    redactPdfLimitation: 'Hidden regions apply to the page you are viewing. Switch pages to hide regions on others.',
+    pageStripLabel: 'Pages',
+    pageStripCapped: (rendered, total) => `Showing first ${rendered} of ${total} pages`,
+    pageStripCurrent: (current, total) => `Page ${current} of ${total}`,
   },
   result: {
     ready: 'Your protected copy is ready',
@@ -199,7 +205,10 @@ export const esStrings: Strings = {
     redactUndo: 'Deshacer',
     redactClear: 'Borrar todo',
     redactCount: (n) => `${n} zona${n === 1 ? '' : 's'} oculta${n === 1 ? '' : 's'}`,
-    redactPdfLimitation: 'La vista previa muestra la página 1. Ocultar zonas en otras páginas aún no está disponible.',
+    redactPdfLimitation: 'Las zonas ocultas se aplican a la página que estás viendo. Cambia de página para ocultar zonas en otras.',
+    pageStripLabel: 'Páginas',
+    pageStripCapped: (rendered, total) => `Mostrando las primeras ${rendered} de ${total} páginas`,
+    pageStripCurrent: (current, total) => `Página ${current} de ${total}`,
   },
   result: {
     ready: 'Tu copia protegida está lista',
