@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   AlertTriangle,
+  Bookmark,
   Check,
   ChevronDown,
   Download,
@@ -10,9 +11,11 @@ import {
   Languages,
   Monitor,
   Moon,
+  Plus,
   Shield,
   Sparkles,
   Sun,
+  Trash2,
   Undo2,
   Upload,
   X,
@@ -36,6 +39,7 @@ import {
 import { useTheme, type Theme } from './hooks/use-theme.ts'
 import { useLang } from './hooks/use-lang.ts'
 import { useDebounced } from './hooks/use-debounced.ts'
+import { usePresets, clearAllLocalSettings, type Preset } from './hooks/use-presets.ts'
 import { getStrings, type Strings } from './locales/strings.ts'
 import { cn } from './lib/utils.ts'
 
@@ -106,6 +110,7 @@ function buildWatermarkText(
 export function App(): JSX.Element {
   const { lang, setLang } = useLang()
   const { theme, setTheme } = useTheme()
+  const { presets, save: savePreset, remove: removePreset, clear: clearPresets } = usePresets()
   const t = useMemo(() => getStrings(lang), [lang])
 
   const [loading, setLoading] = useState(false)
@@ -289,6 +294,47 @@ export function App(): JSX.Element {
     setLevel(recommendedLevel(detection))
     setLevelTouched(true)
   }, [detection])
+
+  const applyPreset = useCallback((p: Preset) => {
+    setRecipient(p.recipient)
+    setPurpose(p.purpose)
+    setLevel(p.level)
+    setLevelTouched(true)
+    setCrosshatchOverride(p.crosshatch)
+    setFrameOverride(p.frame)
+  }, [])
+
+  const onSaveCurrentPreset = useCallback(() => {
+    const rec = recipient.trim()
+    const pur = purpose.trim()
+    if (!rec && !pur) return
+    const defaultName = rec || pur || t.workspace.presetsSavePromptDefault
+    const name = window.prompt(t.workspace.presetsSavePromptTitle, defaultName)
+    if (!name || !name.trim()) return
+    savePreset({
+      name: name.trim(),
+      recipient: rec,
+      purpose: pur,
+      level,
+      crosshatch: crosshatchOverride,
+      frame: frameOverride,
+    })
+  }, [recipient, purpose, level, crosshatchOverride, frameOverride, savePreset, t])
+
+  const onClearAllPresets = useCallback(() => {
+    if (!presets.length) return
+    if (!window.confirm(t.workspace.presetsClearAllConfirm)) return
+    clearPresets()
+  }, [presets.length, clearPresets, t])
+
+  const onDeleteAllLocalSettings = useCallback(() => {
+    if (!window.confirm(t.workspace.deleteLocalSettingsConfirm)) return
+    clearAllLocalSettings()
+    clearPresets()
+    // Restore in-memory defaults so the running session looks reset too.
+    setTheme('system')
+    setLang(navigator.language?.toLowerCase().startsWith('es') ? 'es' : 'en')
+  }, [clearPresets, setTheme, setLang, t])
 
   const overrideDetection = useCallback((type: DocumentType) => {
     setDetection((prev) => ({
@@ -544,6 +590,13 @@ export function App(): JSX.Element {
             frameOn={previewProfile.watermark.patterns.frame}
             onCrosshatchChange={(v) => setCrosshatchOverride(v)}
             onFrameChange={(v) => setFrameOverride(v)}
+            presets={presets}
+            onApplyPreset={applyPreset}
+            onSavePreset={onSaveCurrentPreset}
+            onDeletePreset={removePreset}
+            onClearAllPresets={onClearAllPresets}
+            onDeleteAllLocalSettings={onDeleteAllLocalSettings}
+            canSavePreset={!!recipient.trim() || !!purpose.trim()}
             customEnabled={customEnabled}
             customText={customText}
             onToggleCustom={() => {
@@ -773,6 +826,13 @@ interface WorkspaceProps {
   frameOn: boolean
   onCrosshatchChange: (v: boolean) => void
   onFrameChange: (v: boolean) => void
+  presets: Preset[]
+  onApplyPreset: (p: Preset) => void
+  onSavePreset: () => void
+  onDeletePreset: (id: string) => void
+  onClearAllPresets: () => void
+  onDeleteAllLocalSettings: () => void
+  canSavePreset: boolean
   customEnabled: boolean
   customText: string
   onToggleCustom: () => void
@@ -829,6 +889,13 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     frameOn,
     onCrosshatchChange,
     onFrameChange,
+    presets,
+    onApplyPreset,
+    onSavePreset,
+    onDeletePreset,
+    onClearAllPresets,
+    onDeleteAllLocalSettings,
+    canSavePreset,
     customEnabled,
     customText,
     onToggleCustom,
@@ -987,6 +1054,16 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           <h2 className="text-lg font-semibold tracking-tight">{strings.workspace.protectionTitle}</h2>
           <p className="mt-1 text-sm text-muted-foreground">{strings.workspace.protectionHelper}</p>
         </div>
+
+        <PresetBar
+          presets={presets}
+          onApply={onApplyPreset}
+          onSave={onSavePreset}
+          onDelete={onDeletePreset}
+          onClearAll={onClearAllPresets}
+          canSave={canSavePreset}
+          strings={strings}
+        />
 
         <div className="space-y-4">
           <div className="space-y-1.5">
@@ -1167,6 +1244,19 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                 onChange={onCustomText}
                 strings={strings}
               />
+              <div className="pt-2 border-t border-border/60">
+                <button
+                  type="button"
+                  onClick={onDeleteAllLocalSettings}
+                  className="mt-2 w-full flex items-center gap-2 text-left text-xs text-destructive hover:underline"
+                >
+                  <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                  <span>{strings.workspace.deleteLocalSettings}</span>
+                </button>
+                <p className="mt-1 text-[11px] text-muted-foreground pl-5">
+                  {strings.workspace.deleteLocalSettingsHint}
+                </p>
+              </div>
             </div>
           )}
         </div>
@@ -1396,6 +1486,120 @@ function PageThumb({
         <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-foreground border border-background" />
       )}
     </button>
+  )
+}
+
+function PresetBar({
+  presets,
+  onApply,
+  onSave,
+  onDelete,
+  onClearAll,
+  canSave,
+  strings,
+}: {
+  presets: Preset[]
+  onApply: (p: Preset) => void
+  onSave: () => void
+  onDelete: (id: string) => void
+  onClearAll: () => void
+  canSave: boolean
+  strings: Strings
+}): JSX.Element {
+  const hasAny = presets.length > 0
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+          <Bookmark className="h-3.5 w-3.5" />
+          <span>{strings.workspace.presetsLabel}</span>
+        </div>
+        {hasAny && (
+          <button
+            type="button"
+            onClick={onClearAll}
+            className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+          >
+            {strings.workspace.presetsClearAll}
+          </button>
+        )}
+      </div>
+      {hasAny ? (
+        <div className="flex flex-wrap gap-1.5">
+          {presets.map((p) => (
+            <PresetChip key={p.id} preset={p} onApply={onApply} onDelete={onDelete} strings={strings} />
+          ))}
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={!canSave}
+            className={cn(
+              'inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border border-dashed transition-colors',
+              canSave
+                ? 'border-border hover:border-foreground/50 text-muted-foreground hover:text-foreground'
+                : 'border-border/40 text-muted-foreground/50 cursor-not-allowed',
+            )}
+          >
+            <Plus className="h-3 w-3" />
+            {strings.workspace.presetsSave}
+          </button>
+        </div>
+      ) : (
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-[11px] text-muted-foreground/80 flex-1">
+            {strings.workspace.presetsEmptyHint}
+          </p>
+          <button
+            type="button"
+            onClick={onSave}
+            disabled={!canSave}
+            className={cn(
+              'shrink-0 inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border border-dashed transition-colors',
+              canSave
+                ? 'border-border hover:border-foreground/50 text-muted-foreground hover:text-foreground'
+                : 'border-border/40 text-muted-foreground/50 cursor-not-allowed',
+            )}
+          >
+            <Plus className="h-3 w-3" />
+            {strings.workspace.presetsSave}
+          </button>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function PresetChip({
+  preset,
+  onApply,
+  onDelete,
+  strings,
+}: {
+  preset: Preset
+  onApply: (p: Preset) => void
+  onDelete: (id: string) => void
+  strings: Strings
+}): JSX.Element {
+  return (
+    <span className="group inline-flex items-center rounded-full border border-border bg-muted/30 pl-2.5 pr-1 py-0.5">
+      <button
+        type="button"
+        onClick={() => onApply(preset)}
+        className="text-[11px] font-medium text-foreground hover:text-foreground"
+        title={`${preset.recipient} · ${preset.purpose}`}
+      >
+        {preset.name}
+      </button>
+      <button
+        type="button"
+        onClick={() => onDelete(preset.id)}
+        aria-label={strings.workspace.presetsDeleteOne}
+        title={strings.workspace.presetsDeleteOne}
+        className="ml-1 h-4 w-4 rounded-full flex items-center justify-center text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+      >
+        <X className="h-3 w-3" />
+      </button>
+    </span>
   )
 }
 

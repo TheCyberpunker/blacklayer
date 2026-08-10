@@ -19,14 +19,20 @@ BlackLayer is a fresh implementation, not a fork. It builds on ideas explored by
 
 None of the code in this repository is copied from those projects. Where a technique or UX pattern was directly informed by one of them, it's noted in the source. This is not an attempt to reproduce any of them; it's my own local-first take on the same problem.
 
+## How this is built
+
+BlackLayer is developed with the help of AI models. I use them as a fast, unopinionated pair for the surface-level scaffolding — file layout, boilerplate, string plumbing, config wiring — so I can spend my own attention on the ideas that actually matter for a privacy tool: what the workflow should feel like, what threat model to defend against, what claims we can honestly make, and what to explicitly refuse to promise. Every design decision, every threat-model call, every "no, we won't ship that" is a human one. AI helps me get to a working iteration faster; it does not decide what BlackLayer is.
+
 ## What BlackLayer actually does
 
 - Adds a repeated, purpose-bound watermark ("COPY FOR X · FOR Y ONLY · date") over the document.
 - Uses a per-document cryptographic random seed to vary watermark position, rotation, size, and opacity across tiles. Two exported copies of the same document look subtly different, so tools that expect a regular grid have less to lock onto.
 - Optionally adds a crosshatch security pattern and a border frame at higher protection levels.
-- Rasterizes any PDF page that has manual redactions. Redacted regions are destroyed at the pixel level rather than covered by an overlay that could be lifted.
+- Rasterizes any PDF page that has manual redactions. Redacted regions are destroyed at the pixel level rather than covered by an overlay that could be lifted. Redactions can be solid, blur, or pixelate (solid is safest).
 - Neutralizes PDF metadata (author, subject, keywords, creation and modification dates), and strips image metadata by canvas re-encode.
 - Detects a digital signature in the source PDF and warns before creating a copy that would invalidate it.
+- Auto-detects common document types (DNI, passport, contract, payslip, invoice, financial) from filename, PDF text, and page dimensions, then recommends a protection level and suggests context-appropriate purposes.
+- Saves the recipient + purpose + level combos you use often as local presets. Nothing leaves the browser. A "Delete all local settings" action wipes them along with your theme and language preferences.
 
 ## What BlackLayer explicitly does not promise
 

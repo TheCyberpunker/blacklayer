@@ -84,6 +84,17 @@ export interface Strings {
     patternFrameHint: string
     appliedCrosshatch: string
     appliedFrame: string
+    presetsLabel: string
+    presetsEmptyHint: string
+    presetsSave: string
+    presetsSavePromptTitle: string
+    presetsSavePromptDefault: string
+    presetsDeleteOne: string
+    presetsClearAll: string
+    presetsClearAllConfirm: string
+    deleteLocalSettings: string
+    deleteLocalSettingsHint: string
+    deleteLocalSettingsConfirm: string
   }
   result: {
     ready: string
@@ -204,6 +215,17 @@ export const enStrings: Strings = {
     patternFrameHint: 'Two thin borders around the page.',
     appliedCrosshatch: 'Crosshatch pattern applied',
     appliedFrame: 'Border frame applied',
+    presetsLabel: 'Presets',
+    presetsEmptyHint: 'Save the current recipient, purpose, and protection level as a preset for next time.',
+    presetsSave: 'Save current as preset',
+    presetsSavePromptTitle: 'Name this preset',
+    presetsSavePromptDefault: 'My preset',
+    presetsDeleteOne: 'Delete preset',
+    presetsClearAll: 'Delete all presets',
+    presetsClearAllConfirm: 'Delete every saved preset?',
+    deleteLocalSettings: 'Delete all local settings',
+    deleteLocalSettingsHint: 'Wipes presets, theme, and language stored on this device. Loaded documents are already local-only.',
+    deleteLocalSettingsConfirm: 'Delete every BlackLayer setting stored on this device? This cannot be undone.',
   },
   result: {
     ready: 'Your protected copy is ready',
@@ -324,6 +346,17 @@ export const esStrings: Strings = {
     patternFrameHint: 'Dos bordes finos alrededor de la página.',
     appliedCrosshatch: 'Patrón de trama aplicado',
     appliedFrame: 'Marco aplicado',
+    presetsLabel: 'Ajustes guardados',
+    presetsEmptyHint: 'Guarda el destinatario, motivo y nivel actuales como un ajuste para la próxima vez.',
+    presetsSave: 'Guardar como ajuste',
+    presetsSavePromptTitle: 'Nombre para este ajuste',
+    presetsSavePromptDefault: 'Mi ajuste',
+    presetsDeleteOne: 'Eliminar ajuste',
+    presetsClearAll: 'Eliminar todos los ajustes',
+    presetsClearAllConfirm: '¿Eliminar todos los ajustes guardados?',
+    deleteLocalSettings: 'Eliminar toda la configuración local',
+    deleteLocalSettingsHint: 'Elimina los ajustes, el tema y el idioma guardados en este dispositivo. Los documentos cargados ya son locales.',
+    deleteLocalSettingsConfirm: '¿Eliminar toda la configuración de BlackLayer en este dispositivo? Esta acción no se puede deshacer.',
   },
   result: {
     ready: 'Tu copia protegida está lista',
