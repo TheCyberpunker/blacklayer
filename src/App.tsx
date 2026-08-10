@@ -7,12 +7,15 @@ import {
   Download,
   Eraser,
   FileText,
+  Code2,
+  HelpCircle,
   ImageIcon,
   Languages,
   Monitor,
   Moon,
   Plus,
   Shield,
+  ShieldCheck,
   Sparkles,
   Sun,
   Trash2,
@@ -36,6 +39,16 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from './components/ui/dropdown-menu.tsx'
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from './components/ui/dialog.tsx'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './components/ui/tooltip.tsx'
 import { useTheme, type Theme } from './hooks/use-theme.ts'
 import { useLang } from './hooks/use-lang.ts'
 import { useDebounced } from './hooks/use-debounced.ts'
@@ -112,6 +125,8 @@ export function App(): JSX.Element {
   const { theme, setTheme } = useTheme()
   const { presets, save: savePreset, remove: removePreset, clear: clearPresets } = usePresets()
   const t = useMemo(() => getStrings(lang), [lang])
+  const [howOpen, setHowOpen] = useState(false)
+  const [privacyOpen, setPrivacyOpen] = useState(false)
 
   const [loading, setLoading] = useState(false)
   const [loaded, setLoaded] = useState<LoadedFile | null>(null)
@@ -531,10 +546,26 @@ export function App(): JSX.Element {
   const canProtect = !!loaded && !!recipient.trim() && !!purpose.trim() && !working
 
   return (
-    <div className="min-h-screen flex flex-col">
-      <Header lang={lang} onLangChange={setLang} theme={theme} onThemeChange={setTheme} strings={t} />
+    <TooltipProvider delayDuration={300}>
+      <div className="min-h-screen flex flex-col">
+        <a
+          href="#main"
+          className="sr-only focus:not-sr-only focus:fixed focus:top-2 focus:left-2 focus:z-50 focus:bg-primary focus:text-primary-foreground focus:px-3 focus:py-1.5 focus:rounded-md focus:text-sm"
+        >
+          {t.header.skipToMain}
+        </a>
 
-      <main className="flex-1 w-full max-w-6xl mx-auto px-6 pt-6 pb-16">
+        <Header
+          lang={lang}
+          onLangChange={setLang}
+          theme={theme}
+          onThemeChange={setTheme}
+          strings={t}
+          onOpenHow={() => setHowOpen(true)}
+          onOpenPrivacy={() => setPrivacyOpen(true)}
+        />
+
+        <main id="main" className="flex-1 w-full max-w-6xl mx-auto px-6 pt-6 pb-16">
         {!loaded && !loading && (
           <HeroDrop
             dragActive={dragActive}
@@ -544,6 +575,7 @@ export function App(): JSX.Element {
             onFiles={onFiles}
             strings={t}
             error={error}
+            onOpenHow={() => setHowOpen(true)}
           />
         )}
 
@@ -644,12 +676,32 @@ export function App(): JSX.Element {
       </main>
 
       <footer className="border-t border-border/60">
-        <div className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between text-xs text-muted-foreground">
+        <div className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between text-xs text-muted-foreground gap-3 flex-wrap">
           <span className="font-mono tracking-tight">BlackLayer</span>
-          <span>{t.footer.tagline}</span>
+          <div className="flex items-center gap-4">
+            <button
+              type="button"
+              onClick={() => setHowOpen(true)}
+              className="hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+            >
+              {t.header.navHowItWorks}
+            </button>
+            <button
+              type="button"
+              onClick={() => setPrivacyOpen(true)}
+              className="hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+            >
+              {t.header.navPrivacy}
+            </button>
+            <span>{t.footer.tagline}</span>
+          </div>
         </div>
       </footer>
+
+      <HowItWorksDialog open={howOpen} onOpenChange={setHowOpen} strings={t} />
+      <PrivacyDialog open={privacyOpen} onOpenChange={setPrivacyOpen} strings={t} />
     </div>
+    </TooltipProvider>
   )
 }
 
@@ -661,20 +713,71 @@ interface HeaderProps {
   theme: Theme
   onThemeChange: (t: Theme) => void
   strings: Strings
+  onOpenHow: () => void
+  onOpenPrivacy: () => void
 }
 
-function Header({ lang, onLangChange, theme, onThemeChange, strings }: HeaderProps): JSX.Element {
+function Header({
+  lang,
+  onLangChange,
+  theme,
+  onThemeChange,
+  strings,
+  onOpenHow,
+  onOpenPrivacy,
+}: HeaderProps): JSX.Element {
   return (
     <header className="border-b border-border/60 backdrop-blur supports-[backdrop-filter]:bg-background/70 sticky top-0 z-40">
-      <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between">
-        <div className="flex items-center gap-3">
+      <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
           <span className="text-lg font-bold tracking-tight">BlackLayer</span>
           <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-muted-foreground border border-border/60 rounded px-2 py-0.5">
             <Shield className="h-3 w-3" />
             Local
           </span>
         </div>
+
+        <nav aria-label="Primary" className="hidden md:flex items-center gap-1">
+          <Button variant="ghost" size="sm" onClick={onOpenHow}>
+            <HelpCircle className="h-4 w-4" />
+            {strings.header.navHowItWorks}
+          </Button>
+          <Button variant="ghost" size="sm" onClick={onOpenPrivacy}>
+            <ShieldCheck className="h-4 w-4" />
+            {strings.header.navPrivacy}
+          </Button>
+          <a
+            href="https://github.com/TheCyberpunker/blacklayer"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-2 h-8 px-3 rounded-md text-xs font-medium text-muted-foreground hover:text-foreground hover:bg-accent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+          >
+            <Code2 className="h-4 w-4" />
+            <span>{strings.header.navSource}</span>
+          </a>
+        </nav>
+
         <div className="flex items-center gap-1">
+          {/* Mobile nav triggers as icon-only */}
+          <div className="flex md:hidden items-center gap-1">
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label={strings.header.navHowItWorks} onClick={onOpenHow}>
+                  <HelpCircle className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{strings.header.navHowItWorks}</TooltipContent>
+            </Tooltip>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button variant="ghost" size="icon" aria-label={strings.header.navPrivacy} onClick={onOpenPrivacy}>
+                  <ShieldCheck className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{strings.header.navPrivacy}</TooltipContent>
+            </Tooltip>
+          </div>
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button variant="ghost" size="sm" aria-label={strings.header.langLabel}>
@@ -721,6 +824,87 @@ function Header({ lang, onLangChange, theme, onThemeChange, strings }: HeaderPro
   )
 }
 
+// ---------- Dialogs ----------
+
+function HowItWorksDialog({
+  open,
+  onOpenChange,
+  strings,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  strings: Strings
+}): JSX.Element {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{strings.dialogs.howItWorksTitle}</DialogTitle>
+          <DialogDescription>{strings.dialogs.howItWorksSub}</DialogDescription>
+        </DialogHeader>
+        <ol className="space-y-4 pt-2">
+          {strings.dialogs.howSteps.map((s) => (
+            <li key={s.title} className="space-y-1">
+              <p className="font-medium text-sm">{s.title}</p>
+              <p className="text-sm text-muted-foreground leading-relaxed">{s.body}</p>
+            </li>
+          ))}
+        </ol>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button>{strings.dialogs.howClose}</Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+function PrivacyDialog({
+  open,
+  onOpenChange,
+  strings,
+}: {
+  open: boolean
+  onOpenChange: (open: boolean) => void
+  strings: Strings
+}): JSX.Element {
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{strings.dialogs.privacyTitle}</DialogTitle>
+          <DialogDescription>{strings.dialogs.privacySub}</DialogDescription>
+        </DialogHeader>
+        <ul className="space-y-2 pt-2 text-sm">
+          {strings.dialogs.privacyBullets.map((b, i) => (
+            <li key={i} className="flex items-start gap-2">
+              <Check className="h-4 w-4 shrink-0 mt-0.5 text-foreground/70" />
+              <span className="leading-relaxed">{b}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-2 pt-4 border-t border-border/60 space-y-2">
+          <p className="text-sm font-medium">{strings.dialogs.privacyLimits}</p>
+          <ul className="space-y-2 text-sm text-muted-foreground">
+            {strings.dialogs.privacyLimitBullets.map((b, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5 text-muted-foreground/70" />
+                <span className="leading-relaxed">{b}</span>
+              </li>
+            ))}
+          </ul>
+        </div>
+        <DialogFooter>
+          <DialogClose asChild>
+            <Button>{strings.dialogs.howClose}</Button>
+          </DialogClose>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
 // ---------- Hero drop ----------
 
 interface HeroDropProps {
@@ -731,6 +915,7 @@ interface HeroDropProps {
   onFiles: (list: FileList | null | undefined) => void
   strings: Strings
   error: string | null
+  onOpenHow: () => void
 }
 
 function HeroDrop({
@@ -741,6 +926,7 @@ function HeroDrop({
   onFiles,
   strings,
   error,
+  onOpenHow,
 }: HeroDropProps): JSX.Element {
   return (
     <div className="max-w-2xl mx-auto pt-12 pb-8 text-center animate-fade-in">
@@ -783,10 +969,21 @@ function HeroDrop({
         />
       </label>
 
-      <p className="mt-6 text-xs text-muted-foreground flex items-center justify-center gap-1.5">
-        <Shield className="h-3 w-3" />
-        {strings.hero.privacy}
-      </p>
+      <div className="mt-6 flex items-center justify-center gap-4 text-xs text-muted-foreground flex-wrap">
+        <span className="inline-flex items-center gap-1.5">
+          <Shield className="h-3 w-3" />
+          {strings.hero.privacy}
+        </span>
+        <span aria-hidden="true">·</span>
+        <button
+          type="button"
+          onClick={onOpenHow}
+          className="inline-flex items-center gap-1.5 hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+        >
+          <HelpCircle className="h-3 w-3" />
+          {strings.workspace.heroFirstRunLink}
+        </button>
+      </div>
 
       {error && <p className="mt-6 text-sm text-destructive">{error}</p>}
     </div>
@@ -1049,12 +1246,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
       </section>
 
       {/* Controls */}
-      <aside className="lg:sticky lg:top-20 lg:self-start space-y-6">
-        <div>
-          <h2 className="text-lg font-semibold tracking-tight">{strings.workspace.protectionTitle}</h2>
-          <p className="mt-1 text-sm text-muted-foreground">{strings.workspace.protectionHelper}</p>
-        </div>
-
+      <aside className="lg:sticky lg:top-20 lg:self-start space-y-5">
         <PresetBar
           presets={presets}
           onApply={onApplyPreset}
@@ -1065,7 +1257,8 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           strings={strings}
         />
 
-        <div className="space-y-4">
+        <section className="space-y-4" aria-label={strings.workspace.stepAbout}>
+          <StepHeading step={1} title={strings.workspace.stepAbout} />
           <div className="space-y-1.5">
             <Label htmlFor="recipient">{strings.workspace.recipient}</Label>
             <Input
@@ -1096,7 +1289,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                       type="button"
                       onClick={() => onPurpose(s.label)}
                       className={cn(
-                        'text-[11px] px-2 py-1 rounded-full border transition-colors',
+                        'text-xs px-2.5 py-1 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
                         purpose === s.label
                           ? 'border-foreground bg-foreground text-background'
                           : 'border-border hover:border-foreground/50 text-muted-foreground hover:text-foreground',
@@ -1109,12 +1302,12 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               </div>
             )}
           </div>
-        </div>
+        </section>
 
-        <div className="space-y-2">
-          <Label>{strings.workspace.levelHeading}</Label>
+        <section className="space-y-2 pt-4 border-t border-border/60" aria-label={strings.workspace.stepProtection}>
+          <StepHeading step={2} title={strings.workspace.stepProtection} />
           <LevelPicker level={level} onChange={onLevelChange} strings={strings} />
-          <p className="text-xs text-muted-foreground pt-0.5">
+          <p className="text-xs text-muted-foreground pt-0.5 leading-relaxed">
             {strings.workspace.levelDescription[level]}
           </p>
           {previewMetadataMode === 'neutralize' && (
@@ -1126,7 +1319,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             <button
               type="button"
               onClick={onApplyRecommended}
-              className="mt-2 w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md border border-border hover:border-foreground/40 hover:bg-muted/50 text-left transition-colors"
+              className="mt-2 w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md border border-border hover:border-foreground/40 hover:bg-muted/50 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
               <span className="flex items-center gap-2 text-xs">
                 <Sparkles className="h-3.5 w-3.5 text-foreground/70" />
@@ -1137,12 +1330,12 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               </span>
             </button>
           )}
-        </div>
+        </section>
 
         {/* Redaction */}
-        <div className="space-y-2 pt-1 border-t border-border/60">
-          <div className="flex items-center justify-between pt-3">
-            <Label>{strings.workspace.redactSectionTitle}</Label>
+        <section className="space-y-2 pt-4 border-t border-border/60" aria-label={strings.workspace.stepRedact}>
+          <div className="flex items-center justify-between">
+            <StepHeading step={3} title={strings.workspace.stepRedact} optional />
             {redactionsCount > 0 && (
               <span className="text-[11px] font-mono text-muted-foreground">
                 {strings.workspace.redactCount(redactionsCount)}
@@ -1168,16 +1361,20 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                 </>
               )}
             </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onUndoRedaction}
-              disabled={activePageRedactionsCount === 0}
-              aria-label={strings.workspace.redactUndo}
-              title={strings.workspace.redactUndo}
-            >
-              <Undo2 className="h-4 w-4" />
-            </Button>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onUndoRedaction}
+                  disabled={activePageRedactionsCount === 0}
+                  aria-label={strings.workspace.redactUndo}
+                >
+                  <Undo2 className="h-4 w-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>{strings.workspace.redactUndo}</TooltipContent>
+            </Tooltip>
             <Button
               variant="ghost"
               size="sm"
@@ -1205,17 +1402,17 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               {strings.workspace.redactPdfLimitation}
             </p>
           )}
-        </div>
+        </section>
 
         {/* Advanced */}
-        <div className="space-y-2 pt-1 border-t border-border/60">
+        <section className="space-y-2 pt-4 border-t border-border/60">
           <button
             type="button"
             onClick={onToggleAdvanced}
-            className="pt-3 flex items-center justify-between w-full text-left"
+            className="flex items-center justify-between w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
             aria-expanded={advancedOpen}
           >
-            <Label className="cursor-pointer">{strings.workspace.advancedTitle}</Label>
+            <StepHeading step={4} title={strings.workspace.stepAdvanced} optional />
             <ChevronDown
               className={cn(
                 'h-4 w-4 text-muted-foreground transition-transform',
@@ -1248,18 +1445,18 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                 <button
                   type="button"
                   onClick={onDeleteAllLocalSettings}
-                  className="mt-2 w-full flex items-center gap-2 text-left text-xs text-destructive hover:underline"
+                  className="mt-2 w-full flex items-center gap-2 text-left text-xs text-destructive hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
                 >
                   <Trash2 className="h-3.5 w-3.5 shrink-0" />
                   <span>{strings.workspace.deleteLocalSettings}</span>
                 </button>
-                <p className="mt-1 text-[11px] text-muted-foreground pl-5">
+                <p className="mt-1 text-xs text-muted-foreground pl-5 leading-relaxed">
                   {strings.workspace.deleteLocalSettingsHint}
                 </p>
               </div>
             </div>
           )}
-        </div>
+        </section>
 
         {loaded.kind === 'pdf' && loaded.hasSignature && (
           <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 flex items-start gap-2 text-xs text-destructive">
@@ -1486,6 +1683,33 @@ function PageThumb({
         <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-foreground border border-background" />
       )}
     </button>
+  )
+}
+
+function StepHeading({
+  step,
+  title,
+  optional,
+}: {
+  step: number
+  title: string
+  optional?: boolean
+}): JSX.Element {
+  return (
+    <div className="flex items-baseline gap-2">
+      <span
+        aria-hidden="true"
+        className="text-[11px] font-mono text-muted-foreground tabular-nums"
+      >
+        {String(step).padStart(2, '0')}
+      </span>
+      <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
+      {optional && (
+        <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
+          optional
+        </span>
+      )}
+    </div>
   )
 }
 

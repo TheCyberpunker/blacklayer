@@ -9,6 +9,21 @@ export interface Strings {
     themeSystem: string
     themeLight: string
     themeDark: string
+    navHowItWorks: string
+    navPrivacy: string
+    navSource: string
+    skipToMain: string
+  }
+  dialogs: {
+    howItWorksTitle: string
+    howItWorksSub: string
+    howSteps: { title: string; body: string }[]
+    howClose: string
+    privacyTitle: string
+    privacySub: string
+    privacyBullets: string[]
+    privacyLimits: string
+    privacyLimitBullets: string[]
   }
   hero: {
     title: string
@@ -28,6 +43,11 @@ export interface Strings {
     clear: string
     protectionTitle: string
     protectionHelper: string
+    stepAbout: string
+    stepProtection: string
+    stepRedact: string
+    stepAdvanced: string
+    heroFirstRunLink: string
     recipient: string
     recipientPh: string
     purpose: string
@@ -126,6 +146,50 @@ export const enStrings: Strings = {
     themeSystem: 'System',
     themeLight: 'Light',
     themeDark: 'Dark',
+    navHowItWorks: 'How it works',
+    navPrivacy: 'Privacy',
+    navSource: 'Source',
+    skipToMain: 'Skip to main content',
+  },
+  dialogs: {
+    howItWorksTitle: 'How BlackLayer works',
+    howItWorksSub: 'Four short steps. Everything runs on your device.',
+    howSteps: [
+      {
+        title: '1. Drop your document',
+        body: 'Choose or drag in a PDF, JPG, PNG, or WebP. The file is read directly from your device. Nothing is uploaded.',
+      },
+      {
+        title: '2. Tell us the context',
+        body: 'Enter who this copy is for and why. BlackLayer builds a purpose-bound watermark from your answers, and the live preview updates as you type.',
+      },
+      {
+        title: '3. Optionally hide sensitive areas',
+        body: 'Draw rectangles over anything the recipient does not need to see. Solid fill is safest; blur and pixelate are available but weaker.',
+      },
+      {
+        title: '4. Download the protected copy',
+        body: 'A new file is generated in your browser and offered as a download. Your original is never modified.',
+      },
+    ],
+    howClose: 'Got it',
+    privacyTitle: 'Privacy scope',
+    privacySub: 'What BlackLayer does with your document, and what it does not.',
+    privacyBullets: [
+      'Documents are read and processed locally. They never leave your device via this application.',
+      'No account, no login, no email is required.',
+      'No analytics, telemetry, or third-party trackers are included.',
+      'Fonts, icons, and libraries are bundled locally. The runtime does not fetch anything from third-party CDNs.',
+      'Hidden metadata (author, timestamps, GPS on images) is neutralized when you choose Recommended or Maximum protection.',
+      'Presets and preferences (theme, language) are stored only in your browser. A "Delete all local settings" button in Advanced wipes them.',
+    ],
+    privacyLimits: 'What BlackLayer does not promise',
+    privacyLimitBullets: [
+      'Watermarks are not "unremovable". Modern AI-driven inpainting or a determined attacker can still remove or reconstruct protected content. BlackLayer raises the cost; it does not make the cost infinite.',
+      'Screenshots, photos of the screen, or a camera pointed at a printed copy will always work.',
+      'Once you share a copy with someone, its downstream use is out of scope.',
+      'BlackLayer is an open-source tool provided as-is. See the LICENSE file.',
+    ],
   },
   hero: {
     title: 'Protect documents before sharing them',
@@ -145,6 +209,11 @@ export const enStrings: Strings = {
     clear: 'Clear document',
     protectionTitle: 'Prepare your protected copy',
     protectionHelper: 'Tell us who this copy is for and why. Preview updates as you type.',
+    stepAbout: 'About this copy',
+    stepProtection: 'Protection level',
+    stepRedact: 'Hide sensitive information',
+    stepAdvanced: 'Advanced',
+    heroFirstRunLink: 'New here? See how it works',
     recipient: 'Who is this copy for?',
     recipientPh: 'Hotel, lawyer, landlord, company…',
     purpose: 'Why are you sharing it?',
@@ -257,6 +326,50 @@ export const esStrings: Strings = {
     themeSystem: 'Sistema',
     themeLight: 'Claro',
     themeDark: 'Oscuro',
+    navHowItWorks: 'Cómo funciona',
+    navPrivacy: 'Privacidad',
+    navSource: 'Código',
+    skipToMain: 'Ir al contenido principal',
+  },
+  dialogs: {
+    howItWorksTitle: 'Cómo funciona BlackLayer',
+    howItWorksSub: 'Cuatro pasos. Todo se procesa en tu dispositivo.',
+    howSteps: [
+      {
+        title: '1. Arrastra tu documento',
+        body: 'Elige o arrastra un PDF, JPG, PNG o WebP. El archivo se lee directamente en tu dispositivo. No se sube nada.',
+      },
+      {
+        title: '2. Cuéntanos el contexto',
+        body: 'Indica para quién es esta copia y para qué. BlackLayer construye una marca vinculada a esos datos, y la vista previa se actualiza mientras escribes.',
+      },
+      {
+        title: '3. Oculta lo que no necesites compartir',
+        body: 'Dibuja rectángulos sobre lo que el destinatario no necesita ver. Sólido es lo más seguro; desenfoque y pixelado son opciones más débiles.',
+      },
+      {
+        title: '4. Descarga la copia protegida',
+        body: 'Se genera un archivo nuevo en tu navegador y se te ofrece descargarlo. El original nunca se modifica.',
+      },
+    ],
+    howClose: 'Entendido',
+    privacyTitle: 'Alcance de la privacidad',
+    privacySub: 'Qué hace BlackLayer con tu documento, y qué no.',
+    privacyBullets: [
+      'Los documentos se leen y procesan localmente. Nunca salen del dispositivo a través de esta aplicación.',
+      'No requiere cuenta, inicio de sesión ni correo electrónico.',
+      'No incluye analítica, telemetría ni rastreadores de terceros.',
+      'Las fuentes, iconos y librerías se empaquetan localmente. En tiempo de ejecución no se obtiene nada de CDNs externas.',
+      'La información oculta (autor, fechas, GPS en imágenes) se elimina al elegir protección Recomendada o Máxima.',
+      'Los ajustes y preferencias (tema, idioma) se guardan solo en tu navegador. Hay un botón "Eliminar toda la configuración local" en Avanzado.',
+    ],
+    privacyLimits: 'Lo que BlackLayer no promete',
+    privacyLimitBullets: [
+      'Las marcas no son "imposibles de eliminar". Herramientas modernas basadas en IA o un atacante decidido pueden eliminar o reconstruir el contenido. BlackLayer aumenta el coste; no lo hace infinito.',
+      'Las capturas de pantalla, fotos del monitor o una cámara apuntando a una copia impresa siempre serán posibles.',
+      'Cuando compartes una copia con alguien, su uso posterior queda fuera del alcance.',
+      'BlackLayer es una herramienta de código abierto, provista "tal cual". Consulta el archivo LICENSE.',
+    ],
   },
   hero: {
     title: 'Protege tus documentos antes de compartirlos',
@@ -276,6 +389,11 @@ export const esStrings: Strings = {
     clear: 'Descartar documento',
     protectionTitle: 'Prepara tu copia protegida',
     protectionHelper: 'Indícanos para quién es esta copia y para qué. La vista previa se actualiza mientras escribes.',
+    stepAbout: 'Sobre esta copia',
+    stepProtection: 'Nivel de protección',
+    stepRedact: 'Ocultar información sensible',
+    stepAdvanced: 'Avanzado',
+    heroFirstRunLink: '¿Primera vez? Mira cómo funciona',
     recipient: '¿Para quién es esta copia?',
     recipientPh: 'Hotel, abogado, arrendador, empresa…',
     purpose: '¿Para qué la vas a compartir?',
