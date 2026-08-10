@@ -1,2 +1,41 @@
 setup/
 docs/
+
+# Node / Vite
+node_modules/
+dist/
+dist-ssr/
+*.local
+.cache/
+.vite/
+.turbo/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+logs/
+*.log
+
+# Editor / OS
+.vscode/*
+!.vscode/extensions.json
+.idea/
+.DS_Store
+Thumbs.db
+
+# Env
+.env
+.env.*
+!.env.example
+
+# Test / coverage
+coverage/
+.nyc_output/
+playwright-report/
+test-results/
+
+# Tauri (phase 7)
+src-tauri/target/

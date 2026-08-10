@@ -1,0 +1,1 @@
+{"root":["./src/app.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/core/types.ts","./src/core/image/watermark.ts","./src/core/pdf/watermark.ts"],"version":"5.9.3"}
