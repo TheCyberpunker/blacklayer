@@ -169,13 +169,15 @@ function drawCrosshatch(
   colorBase: (alpha: number) => string,
 ): void {
   const scaleFactor = Math.min(width, height) / 800
-  const spacing = Math.max(12, 22 * scaleFactor)
-  const alpha = Math.max(0.03, options.opacity * 0.18)
+  const spacing = Math.max(14, 20 * scaleFactor)
+  // Floor at 0.12 so the pattern is visible even when the base watermark
+  // opacity is low; cap at 0.32 so it does not overpower the document.
+  const alpha = Math.max(0.12, Math.min(0.32, options.opacity * 0.55))
   const diagonal = Math.hypot(width, height)
 
   ctx.save()
   ctx.strokeStyle = colorBase(alpha)
-  ctx.lineWidth = Math.max(0.5, 0.6 * scaleFactor)
+  ctx.lineWidth = Math.max(1, 1.4 * scaleFactor)
 
   // Direction 1: ~+30°
   ctx.save()

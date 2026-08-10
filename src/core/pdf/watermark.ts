@@ -145,9 +145,9 @@ function drawPdfCrosshatch(
   color: ReturnType<typeof rgb>,
 ): void {
   const scaleFactor = Math.min(width, height) / 800
-  const spacing = Math.max(12, 22 * scaleFactor)
-  const alpha = Math.max(0.03, options.opacity * 0.18)
-  const thickness = Math.max(0.4, 0.6 * scaleFactor)
+  const spacing = Math.max(14, 20 * scaleFactor)
+  const alpha = Math.max(0.12, Math.min(0.32, options.opacity * 0.55))
+  const thickness = Math.max(0.9, 1.3 * scaleFactor)
   const diagonal = Math.hypot(width, height)
   const cx = width / 2
   const cy = height / 2
