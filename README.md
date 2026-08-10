@@ -68,6 +68,35 @@ docker compose down
 
 The nginx config in [nginx.conf](nginx.conf) enforces the same Content-Security-Policy as the app's `<meta>` tag, sets `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, and a `Permissions-Policy` that disables camera, microphone, geolocation, and interest-cohort. If you host BlackLayer behind a proxy that rewrites headers, verify the CSP still reaches the browser.
 
+## Roadmap
+
+Rough shape of what is planned. Nothing here is a commitment; priorities move as the tool gets used against real documents.
+
+**Near term**
+
+- Local OCR for image documents so photos of IDs, passports, and driving licences get the same content-based detection PDFs already do. First pass will target Spanish and English via a bundled, offline engine.
+- On-demand PDF rendering so documents with more than the current 20-page preview cap open without truncation.
+- XMP metadata scrubbing on PDFs to close the current Info-dict-only limitation.
+- First-run onboarding for people who land on the app cold.
+- Batch protection of multiple files with a single recipient / purpose combo.
+
+**Later research**
+
+- Broader-language, higher-accuracy local OCR and vision models running entirely on the user's hardware to preserve document privacy. Candidates I want to evaluate:
+  - PaddleOCR by Baidu, an open-source OCR that handles Chinese text well.
+  - Lightweight document parsers along the lines of Unlimited-OCR / Qianfan-OCR (baidu/Qianfan-OCR).
+  - Vision-language models such as Qwen2-VL for local extraction and layout understanding.
+
+  Anything integrated here must run fully offline and never send document contents to a third-party service. The goal is stronger detection and, eventually, safer field-level auto-hiding without weakening the local-first guarantee.
+
+- Tauri desktop packaging so the app installs as a native application on Windows, Linux, and macOS.
+
+**Not on the roadmap**
+
+- Server-side processing.
+- Any feature that requires a user account.
+- Any feature that transmits document contents to a third party.
+
 ## Contributing
 
 Contributions welcome. Please open an issue before large changes so the shape can be discussed. Do not include real personal data in issues, screenshots, or fixtures. Fictional samples only.
