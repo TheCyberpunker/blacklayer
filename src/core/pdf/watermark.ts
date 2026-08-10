@@ -1,6 +1,6 @@
 import { PDFDocument, StandardFonts, degrees, rgb } from 'pdf-lib'
-import type { WatermarkOptions } from '../types'
-import { formatWatermarkLines } from '../types'
+import type { WatermarkOptions } from '../types.ts'
+import { formatWatermarkLines } from '../types.ts'
 
 export interface ApplyPdfWatermarkArgs {
   source: ArrayBuffer

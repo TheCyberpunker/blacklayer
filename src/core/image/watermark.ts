@@ -1,5 +1,5 @@
-import type { WatermarkOptions } from '../types'
-import { formatWatermarkLines } from '../types'
+import type { WatermarkOptions } from '../types.ts'
+import { formatWatermarkLines } from '../types.ts'
 
 export interface ApplyImageWatermarkArgs {
   source: Blob

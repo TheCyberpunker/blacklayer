@@ -1,7 +1,7 @@
 import { useCallback, useMemo, useRef, useState } from 'react'
-import { applyPdfWatermark } from './core/pdf/watermark'
-import { applyImageWatermark } from './core/image/watermark'
-import { defaultWatermarkOptions } from './core/types'
+import { applyPdfWatermark } from './core/pdf/watermark.ts'
+import { applyImageWatermark } from './core/image/watermark.ts'
+import { defaultWatermarkOptions } from './core/types.ts'
 
 type Lang = 'en' | 'es'
 
