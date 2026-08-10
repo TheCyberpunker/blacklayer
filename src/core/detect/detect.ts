@@ -50,9 +50,9 @@ export async function detectDocument(file: File, base: RenderedBase): Promise<De
   }
 
   // 2. Aspect ratio (single-page documents only)
-  const firstPage = base.pages[0]
-  if (firstPage && base.pages.length === 1) {
-    const aspect = firstPage.intrinsicWidth / firstPage.intrinsicHeight
+  const firstThumb = base.thumbnails[0]
+  if (firstThumb && base.totalPages === 1) {
+    const aspect = firstThumb.intrinsicWidth / firstThumb.intrinsicHeight
     for (const h of ASPECT_HINTS) {
       if (aspect >= h.minAspect - CARD_ASPECT_TOLERANCE && aspect <= h.maxAspect + CARD_ASPECT_TOLERANCE) {
         bump(

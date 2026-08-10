@@ -24,7 +24,7 @@ import {
   X,
 } from 'lucide-react'
 import { profileFor, type ProtectionLevel, type RedactionMode, type RedactionRect, type WatermarkText } from './core/types.ts'
-import { releaseBase, type RenderedBase } from './core/preview/render.ts'
+import { releaseBase, type RenderedBase, type RenderedPage, type RenderedThumb } from './core/preview/render.ts'
 import { composite, drawOriginal } from './core/preview/composite.ts'
 import type { DetectionResult, DocumentType } from './core/detect/types.ts'
 import { UNKNOWN_DETECTION } from './core/detect/types.ts'
@@ -158,6 +158,8 @@ export function App(): JSX.Element {
   const originalCanvasRef = useRef<HTMLCanvasElement>(null)
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
   const sliderDragging = useRef(false)
+  const [activePage, setActivePage] = useState<RenderedPage | null>(null)
+  const [pageLoading, setPageLoading] = useState(false)
   const debouncedRecipient = useDebounced(recipient, 80)
   const debouncedPurpose = useDebounced(purpose, 80)
   const debouncedCustom = useDebounced(customText, 80)
@@ -178,13 +180,39 @@ export function App(): JSX.Element {
     [level, debouncedRecipient, debouncedPurpose, lang, effectiveCustom, docSeed, crosshatchOverride, frameOverride],
   )
 
-  const activePage = loaded?.base.pages[activePageIndex] ?? loaded?.base.pages[0]
   const activePageRedactions = redactionsByPage.get(activePageIndex) ?? []
   const totalRedactionsCount = useMemo(() => {
     let n = 0
     for (const arr of redactionsByPage.values()) n += arr.length
     return n
   }, [redactionsByPage])
+
+  // Load the active page on demand from the RenderedBase provider.
+  useEffect(() => {
+    if (!loaded) {
+      setActivePage(null)
+      return
+    }
+    let cancelled = false
+    setPageLoading(true)
+    loaded.base
+      .getPage(activePageIndex)
+      .then((page) => {
+        if (cancelled) return
+        setActivePage(page)
+      })
+      .catch(() => {
+        if (cancelled) return
+        setActivePage(null)
+      })
+      .finally(() => {
+        if (cancelled) return
+        setPageLoading(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [loaded, activePageIndex])
 
   // Live redraw of the composite (protected view).
   useEffect(() => {
@@ -587,11 +615,12 @@ export function App(): JSX.Element {
           </div>
         )}
 
-        {loaded && !loading && activePage && (
+        {loaded && !loading && (
           <Workspace
             loaded={loaded}
             activePage={activePage}
             activePageIndex={activePageIndex}
+            pageLoading={pageLoading}
             onSelectPage={(i) => {
               setActivePageIndex(i)
               setActiveRect(null)
@@ -994,8 +1023,9 @@ function HeroDrop({
 
 interface WorkspaceProps {
   loaded: LoadedFile
-  activePage: NonNullable<LoadedFile['base']['pages'][number]>
+  activePage: RenderedPage | null
   activePageIndex: number
+  pageLoading: boolean
   onSelectPage: (i: number) => void
   canvasRef: React.RefObject<HTMLCanvasElement>
   originalCanvasRef: React.RefObject<HTMLCanvasElement>
@@ -1059,6 +1089,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
   const {
     loaded,
     activePageIndex,
+    pageLoading,
     onSelectPage,
     canvasRef,
     originalCanvasRef,
@@ -1182,13 +1213,21 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               onPointerUp={onPointerUp}
               onPointerCancel={onPointerUp}
               className={cn(
-                'absolute inset-0 w-full h-full object-contain touch-none select-none',
+                'absolute inset-0 w-full h-full object-contain touch-none select-none transition-opacity',
                 redactMode && compareMode === 'protected' ? 'cursor-crosshair' : '',
+                pageLoading ? 'opacity-50' : 'opacity-100',
               )}
               style={{
                 visibility: compareMode === 'original' ? 'hidden' : 'visible',
               }}
             />
+            {pageLoading && (
+              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
+                <div className="rounded-full bg-black/70 text-white text-[11px] font-mono uppercase tracking-wider px-3 py-1.5 animate-pulse">
+                  loading page {activePageIndex + 1}…
+                </div>
+              </div>
+            )}
             {compareMode !== 'protected' && (
               <canvas
                 ref={originalCanvasRef}
@@ -1595,47 +1634,39 @@ function PageStrip({
   redactionsByPage: ReadonlyMap<number, RedactionRect[]>
   strings: Strings
 }): JSX.Element {
-  const pages = loaded.base.pages
-  const total = loaded.base.totalPages
-  const rendered = loaded.base.renderedPageCount
-  const showCappedNote = rendered < total
+  const thumbnails = loaded.base.thumbnails
 
   return (
-    <div className="mt-3 space-y-2">
+    <div className="mt-3">
       <div
         role="listbox"
         aria-label={strings.workspace.pageStripLabel}
         className="flex gap-2 overflow-x-auto no-scrollbar pb-1 -mx-1 px-1"
       >
-        {pages.map((p) => {
-          const rects = redactionsByPage.get(p.index) ?? []
+        {thumbnails.map((thumb) => {
+          const rects = redactionsByPage.get(thumb.index) ?? []
           return (
             <PageThumb
-              key={p.index}
-              page={p}
-              selected={p.index === activePageIndex}
+              key={thumb.index}
+              thumb={thumb}
+              selected={thumb.index === activePageIndex}
               redactionCount={rects.length}
-              onSelect={() => onSelectPage(p.index)}
+              onSelect={() => onSelectPage(thumb.index)}
             />
           )
         })}
       </div>
-      {showCappedNote && (
-        <p className="text-[11px] font-mono text-muted-foreground text-center">
-          {strings.workspace.pageStripCapped(rendered, total)}
-        </p>
-      )}
     </div>
   )
 }
 
 function PageThumb({
-  page,
+  thumb,
   selected,
   redactionCount,
   onSelect,
 }: {
-  page: LoadedFile['base']['pages'][number]
+  thumb: RenderedThumb
   selected: boolean
   redactionCount: number
   onSelect: () => void
@@ -1644,16 +1675,16 @@ function PageThumb({
   useEffect(() => {
     const c = canvasRef.current
     if (!c) return
-    c.width = page.thumbnail.width
-    c.height = page.thumbnail.height
+    c.width = thumb.thumbnail.width
+    c.height = thumb.thumbnail.height
     const ctx = c.getContext('2d', { alpha: false })
     if (!ctx) return
     ctx.fillStyle = '#ffffff'
     ctx.fillRect(0, 0, c.width, c.height)
-    ctx.drawImage(page.thumbnail, 0, 0)
-  }, [page.thumbnail])
+    ctx.drawImage(thumb.thumbnail, 0, 0)
+  }, [thumb.thumbnail])
 
-  const aspect = page.thumbnail.width / page.thumbnail.height
+  const aspect = thumb.thumbnail.width / thumb.thumbnail.height
   const heightPx = 96
   const widthPx = Math.max(48, Math.round(heightPx * aspect))
 
@@ -1664,11 +1695,11 @@ function PageThumb({
       aria-selected={selected}
       onClick={onSelect}
       className={cn(
-        'relative shrink-0 rounded-md overflow-hidden border-2 transition-colors bg-white',
+        'relative shrink-0 rounded-md overflow-hidden border-2 transition-colors bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
         selected ? 'border-foreground' : 'border-border hover:border-foreground/40',
       )}
       style={{ width: widthPx, height: heightPx }}
-      title={`Page ${page.index + 1}`}
+      title={`Page ${thumb.index + 1}`}
     >
       <canvas ref={canvasRef} className="w-full h-full object-contain" />
       <span
@@ -1677,7 +1708,7 @@ function PageThumb({
           selected ? 'bg-foreground text-background' : 'bg-black/60 text-white',
         )}
       >
-        {page.index + 1}
+        {thumb.index + 1}
       </span>
       {redactionCount > 0 && (
         <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-foreground border border-background" />
