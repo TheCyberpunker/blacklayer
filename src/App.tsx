@@ -17,9 +17,9 @@ import {
   Upload,
   X,
 } from 'lucide-react'
-import { profileFor, type ProtectionLevel, type RedactionRect, type WatermarkText } from './core/types.ts'
+import { profileFor, type ProtectionLevel, type RedactionMode, type RedactionRect, type WatermarkText } from './core/types.ts'
 import { releaseBase, type RenderedBase } from './core/preview/render.ts'
-import { composite } from './core/preview/composite.ts'
+import { composite, drawOriginal } from './core/preview/composite.ts'
 import type { DetectionResult, DocumentType } from './core/detect/types.ts'
 import { UNKNOWN_DETECTION } from './core/detect/types.ts'
 import { purposesFor, recommendedLevel } from './core/detect/templates.ts'
@@ -49,6 +49,8 @@ type LoadedFile = {
 const ACCEPT = 'application/pdf,image/jpeg,image/png,image/webp'
 const LEVELS: ProtectionLevel[] = ['basic', 'recommended', 'maximum']
 const OVERRIDE_TYPES: DocumentType[] = ['identity', 'passport', 'driving_licence', 'contract', 'payslip', 'invoice', 'financial', 'unknown']
+const REDACT_MODES: RedactionMode[] = ['solid', 'blur', 'pixelate']
+type CompareMode = 'protected' | 'slider' | 'original'
 const MIN_RECT = 0.008
 
 const detectKind = (file: File): 'pdf' | 'image' | null => {
@@ -122,7 +124,10 @@ export function App(): JSX.Element {
   const [frameOverride, setFrameOverride] = useState<boolean | null>(null)
   const [redactionsByPage, setRedactionsByPage] = useState<Map<number, RedactionRect[]>>(new Map())
   const [redactMode, setRedactMode] = useState(false)
+  const [redactStyle, setRedactStyle] = useState<RedactionMode>('solid')
   const [activeRect, setActiveRect] = useState<RedactionRect | null>(null)
+  const [compareMode, setCompareMode] = useState<CompareMode>('protected')
+  const [dividerX, setDividerX] = useState(0.5)
   const [dragActive, setDragActive] = useState(false)
   const [working, setWorking] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -130,7 +135,9 @@ export function App(): JSX.Element {
   const [outputName, setOutputName] = useState<string>('')
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const originalCanvasRef = useRef<HTMLCanvasElement>(null)
   const dragStartRef = useRef<{ x: number; y: number } | null>(null)
+  const sliderDragging = useRef(false)
   const debouncedRecipient = useDebounced(recipient, 80)
   const debouncedPurpose = useDebounced(purpose, 80)
   const debouncedCustom = useDebounced(customText, 80)
@@ -159,7 +166,7 @@ export function App(): JSX.Element {
     return n
   }, [redactionsByPage])
 
-  // Live redraw on any relevant change.
+  // Live redraw of the composite (protected view).
   useEffect(() => {
     if (!loaded || !activePage || !canvasRef.current) return
     composite({
@@ -171,6 +178,14 @@ export function App(): JSX.Element {
       activeRect,
     })
   }, [loaded, activePage, previewProfile, lang, activePageRedactions, activeRect])
+
+  // Draw the untouched original into the overlay canvas whenever compare mode
+  // shows it or the active page changes.
+  useEffect(() => {
+    if (compareMode === 'protected') return
+    if (!activePage || !originalCanvasRef.current) return
+    drawOriginal(originalCanvasRef.current, activePage)
+  }, [compareMode, activePage])
 
   const clearOutput = useCallback(() => {
     setOutputUrl((prev) => {
@@ -210,6 +225,9 @@ export function App(): JSX.Element {
         setActivePageIndex(0)
         setRedactionsByPage(new Map())
         setRedactMode(false)
+        setRedactStyle('solid')
+        setCompareMode('protected')
+        setDividerX(0.5)
         setCustomEnabled(false)
         setCustomText('')
         setLevelTouched(false)
@@ -252,6 +270,9 @@ export function App(): JSX.Element {
     setCustomText('')
     setRedactionsByPage(new Map())
     setRedactMode(false)
+    setRedactStyle('solid')
+    setCompareMode('protected')
+    setDividerX(0.5)
     setAdvancedOpen(false)
     setCrosshatchOverride(null)
     setFrameOverride(null)
@@ -373,15 +394,15 @@ export function App(): JSX.Element {
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (!redactMode || !loaded) return
+      if (!redactMode || !loaded || compareMode !== 'protected') return
       e.preventDefault()
       ;(e.target as Element).setPointerCapture?.(e.pointerId)
       const p = canvasToNormalized(e.clientX, e.clientY)
       if (!p) return
       dragStartRef.current = p
-      setActiveRect({ id: 'active', x: p.x, y: p.y, w: 0, h: 0 })
+      setActiveRect({ id: 'active', x: p.x, y: p.y, w: 0, h: 0, mode: redactStyle })
     },
-    [redactMode, loaded, canvasToNormalized],
+    [redactMode, loaded, canvasToNormalized, compareMode, redactStyle],
   )
 
   const onPointerMove = useCallback(
@@ -396,9 +417,10 @@ export function App(): JSX.Element {
         y: Math.min(start.y, p.y),
         w: Math.abs(p.x - start.x),
         h: Math.abs(p.y - start.y),
+        mode: redactStyle,
       })
     },
-    [redactMode, canvasToNormalized],
+    [redactMode, canvasToNormalized, redactStyle],
   )
 
   const onPointerUp = useCallback(
@@ -410,7 +432,7 @@ export function App(): JSX.Element {
       setActiveRect(null)
       if (!rect) return
       if (rect.w < MIN_RECT || rect.h < MIN_RECT) return
-      const finalRect: RedactionRect = { ...rect, id: nextId() }
+      const finalRect: RedactionRect = { ...rect, id: nextId(), mode: redactStyle }
       setRedactionsByPage((prev) => {
         const next = new Map(prev)
         const arr = next.get(activePageIndex) ?? []
@@ -418,7 +440,7 @@ export function App(): JSX.Element {
         return next
       })
     },
-    [redactMode, activeRect, activePageIndex],
+    [redactMode, activeRect, activePageIndex, redactStyle],
   )
 
   const undoRedaction = useCallback(() => {
@@ -436,6 +458,28 @@ export function App(): JSX.Element {
   const clearRedactions = useCallback(() => {
     setRedactionsByPage(new Map())
     setActiveRect(null)
+  }, [])
+
+  // ---------- Slider divider handlers ----------
+
+  const onDividerPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    ;(e.target as Element).setPointerCapture?.(e.pointerId)
+    sliderDragging.current = true
+  }, [])
+
+  const onDividerPointerMove = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    if (!sliderDragging.current) return
+    const container = (e.currentTarget as HTMLElement).parentElement
+    if (!container) return
+    const rect = container.getBoundingClientRect()
+    const x = (e.clientX - rect.left) / rect.width
+    setDividerX(Math.max(0, Math.min(1, x)))
+  }, [])
+
+  const onDividerPointerUp = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
+    ;(e.target as Element).releasePointerCapture?.(e.pointerId)
+    sliderDragging.current = false
   }, [])
 
   const canProtect = !!loaded && !!recipient.trim() && !!purpose.trim() && !working
@@ -475,6 +519,15 @@ export function App(): JSX.Element {
               setActiveRect(null)
             }}
             canvasRef={canvasRef}
+            originalCanvasRef={originalCanvasRef}
+            compareMode={compareMode}
+            onCompareModeChange={setCompareMode}
+            dividerX={dividerX}
+            onDividerPointerDown={onDividerPointerDown}
+            onDividerPointerMove={onDividerPointerMove}
+            onDividerPointerUp={onDividerPointerUp}
+            redactStyle={redactStyle}
+            onRedactStyleChange={setRedactStyle}
             recipient={recipient}
             purpose={purpose}
             level={level}
@@ -695,6 +748,15 @@ interface WorkspaceProps {
   activePageIndex: number
   onSelectPage: (i: number) => void
   canvasRef: React.RefObject<HTMLCanvasElement>
+  originalCanvasRef: React.RefObject<HTMLCanvasElement>
+  compareMode: CompareMode
+  onCompareModeChange: (m: CompareMode) => void
+  dividerX: number
+  onDividerPointerDown: (e: React.PointerEvent<HTMLDivElement>) => void
+  onDividerPointerMove: (e: React.PointerEvent<HTMLDivElement>) => void
+  onDividerPointerUp: (e: React.PointerEvent<HTMLDivElement>) => void
+  redactStyle: RedactionMode
+  onRedactStyleChange: (m: RedactionMode) => void
   recipient: string
   purpose: string
   level: ProtectionLevel
@@ -742,6 +804,15 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     activePageIndex,
     onSelectPage,
     canvasRef,
+    originalCanvasRef,
+    compareMode,
+    onCompareModeChange,
+    dividerX,
+    onDividerPointerDown,
+    onDividerPointerMove,
+    onDividerPointerUp,
+    redactStyle,
+    onRedactStyleChange,
     recipient,
     purpose,
     level,
@@ -826,6 +897,19 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             redactMode ? 'border-foreground/60' : 'border-border',
           )}
         >
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <ComparePicker
+              value={compareMode}
+              onChange={onCompareModeChange}
+              strings={strings}
+            />
+            <span className="text-[11px] font-mono text-muted-foreground shrink-0">
+              {isMultiPage
+                ? strings.workspace.pageStripCurrent(activePageIndex + 1, loaded.base.totalPages)
+                : ''}
+            </span>
+          </div>
+
           <div className="relative w-full aspect-[3/4] sm:aspect-auto sm:min-h-[520px] bg-white rounded-lg overflow-hidden shadow-sm">
             <canvas
               ref={canvasRef}
@@ -835,17 +919,52 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               onPointerCancel={onPointerUp}
               className={cn(
                 'absolute inset-0 w-full h-full object-contain touch-none select-none',
-                redactMode ? 'cursor-crosshair' : '',
+                redactMode && compareMode === 'protected' ? 'cursor-crosshair' : '',
               )}
+              style={{
+                visibility: compareMode === 'original' ? 'hidden' : 'visible',
+              }}
             />
-            {redactMode && (
-              <div className="pointer-events-none absolute top-2 left-2 rounded bg-black/70 text-white text-[10px] font-mono uppercase tracking-wider px-2 py-1">
-                {strings.workspace.redactSectionTitle}
+            {compareMode !== 'protected' && (
+              <canvas
+                ref={originalCanvasRef}
+                className="absolute inset-0 w-full h-full object-contain pointer-events-none"
+                style={
+                  compareMode === 'slider'
+                    ? { clipPath: `inset(0 ${(1 - dividerX) * 100}% 0 0)` }
+                    : undefined
+                }
+              />
+            )}
+            {compareMode === 'slider' && (
+              <div
+                className="absolute inset-y-0 z-10"
+                style={{ left: `${dividerX * 100}%`, transform: 'translateX(-50%)' }}
+                onPointerDown={onDividerPointerDown}
+                onPointerMove={onDividerPointerMove}
+                onPointerUp={onDividerPointerUp}
+                onPointerCancel={onDividerPointerUp}
+              >
+                <div className="relative h-full w-1 bg-foreground/80 cursor-ew-resize">
+                  <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 h-8 w-8 rounded-full bg-foreground text-background flex items-center justify-center shadow-md">
+                    <ChevronDown className="h-4 w-4 -rotate-90" />
+                  </div>
+                </div>
               </div>
             )}
-            {isMultiPage && (
-              <div className="pointer-events-none absolute top-2 right-2 rounded bg-black/70 text-white text-[10px] font-mono uppercase tracking-wider px-2 py-1">
-                {strings.workspace.pageStripCurrent(activePageIndex + 1, loaded.base.totalPages)}
+            {compareMode === 'slider' && (
+              <>
+                <div className="pointer-events-none absolute top-2 left-2 rounded bg-black/70 text-white text-[10px] font-mono uppercase tracking-wider px-2 py-1">
+                  {strings.workspace.compareOriginal}
+                </div>
+                <div className="pointer-events-none absolute top-2 right-2 rounded bg-black/70 text-white text-[10px] font-mono uppercase tracking-wider px-2 py-1">
+                  {strings.workspace.compareProtected}
+                </div>
+              </>
+            )}
+            {compareMode === 'protected' && redactMode && (
+              <div className="pointer-events-none absolute top-2 left-2 rounded bg-black/70 text-white text-[10px] font-mono uppercase tracking-wider px-2 py-1">
+                {strings.workspace.redactSectionTitle}
               </div>
             )}
           </div>
@@ -994,6 +1113,16 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           <p className="text-xs text-muted-foreground">
             {redactMode ? strings.workspace.redactHint : ''}
           </p>
+          <RedactStylePicker
+            value={redactStyle}
+            onChange={onRedactStyleChange}
+            strings={strings}
+          />
+          {redactStyle !== 'solid' && (
+            <p className="text-[11px] text-muted-foreground/80">
+              {strings.workspace.redactModeHint}
+            </p>
+          )}
           {isMultiPage && (
             <p className="text-[11px] text-muted-foreground/80 font-mono">
               {strings.workspace.redactPdfLimitation}
@@ -1267,6 +1396,95 @@ function PageThumb({
         <span className="absolute top-0.5 right-0.5 h-2 w-2 rounded-full bg-foreground border border-background" />
       )}
     </button>
+  )
+}
+
+function ComparePicker({
+  value,
+  onChange,
+  strings,
+}: {
+  value: CompareMode
+  onChange: (m: CompareMode) => void
+  strings: Strings
+}): JSX.Element {
+  const items: { key: CompareMode; label: string }[] = [
+    { key: 'protected', label: strings.workspace.compareProtected },
+    { key: 'slider', label: strings.workspace.compareSlider },
+    { key: 'original', label: strings.workspace.compareOriginal },
+  ]
+  return (
+    <div
+      role="radiogroup"
+      aria-label={strings.workspace.compareLabel}
+      className="inline-flex gap-1 p-0.5 rounded-md bg-muted text-xs"
+    >
+      {items.map((it) => {
+        const selected = it.key === value
+        return (
+          <button
+            key={it.key}
+            type="button"
+            role="radio"
+            aria-checked={selected}
+            onClick={() => onChange(it.key)}
+            className={cn(
+              'px-2.5 h-7 rounded font-medium transition-colors',
+              selected ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+            )}
+          >
+            {it.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function RedactStylePicker({
+  value,
+  onChange,
+  strings,
+}: {
+  value: RedactionMode
+  onChange: (m: RedactionMode) => void
+  strings: Strings
+}): JSX.Element {
+  const labels: Record<RedactionMode, string> = {
+    solid: strings.workspace.redactModeSolid,
+    blur: strings.workspace.redactModeBlur,
+    pixelate: strings.workspace.redactModePixelate,
+  }
+  return (
+    <div className="space-y-1.5 pt-1">
+      <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+        {strings.workspace.redactModeLabel}
+      </span>
+      <div
+        role="radiogroup"
+        aria-label={strings.workspace.redactModeLabel}
+        className="grid grid-cols-3 gap-1 p-1 rounded-md bg-muted"
+      >
+        {REDACT_MODES.map((m) => {
+          const selected = m === value
+          return (
+            <button
+              key={m}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => onChange(m)}
+              className={cn(
+                'h-7 text-xs font-medium rounded transition-colors',
+                selected ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {labels[m]}
+            </button>
+          )
+        })}
+      </div>
+    </div>
   )
 }
 

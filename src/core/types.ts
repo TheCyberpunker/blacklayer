@@ -1,9 +1,13 @@
 export type ProtectionLevel = 'basic' | 'recommended' | 'maximum'
 export type MetadataMode = 'preserve' | 'neutralize'
 
+export type RedactionMode = 'solid' | 'blur' | 'pixelate'
+
 /**
  * Redaction rectangle in normalized coordinates relative to the rendered base.
  * x, y, w, h are all in [0, 1]. Multiply by base intrinsic dimensions to draw.
+ * `mode` is fixed at rect creation time so a document can mix modes if the user
+ * changes selection mid-session.
  */
 export interface RedactionRect {
   id: string
@@ -11,6 +15,7 @@ export interface RedactionRect {
   y: number
   w: number
   h: number
+  mode: RedactionMode
 }
 
 export interface WatermarkText {

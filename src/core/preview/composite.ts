@@ -3,6 +3,7 @@ import { formatWatermarkLines } from '../types.ts'
 import type { Lang } from '../../hooks/use-lang.ts'
 import type { RenderedPage } from './render.ts'
 import { drawWatermarkOnCanvas } from '../watermark/draw.ts'
+import { applyRedactionsToCanvas } from '../redact/apply.ts'
 
 export interface CompositeArgs {
   target: HTMLCanvasElement
@@ -34,10 +35,10 @@ export function composite({
   ctx.drawImage(page.bitmap, 0, 0, target.width, target.height)
 
   if (redactions && redactions.length) {
-    drawRedactions(ctx, target.width, target.height, redactions, false)
+    applyRedactionsToCanvas(ctx, redactions, target.width, target.height)
   }
   if (activeRect) {
-    drawRedactions(ctx, target.width, target.height, [activeRect], true)
+    drawActiveDragOverlay(ctx, target.width, target.height, activeRect)
   }
 
   const lines = formatWatermarkLines(options.text, lang)
@@ -60,28 +61,43 @@ export function composite({
   })
 }
 
-function drawRedactions(
+/**
+ * Semi-transparent fill + dashed outline for the rectangle currently being
+ * dragged. This is a UI affordance, not the final look of the redaction.
+ */
+function drawActiveDragOverlay(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
-  rects: readonly RedactionRect[],
-  active: boolean,
+  rect: RedactionRect,
 ): void {
+  const rx = Math.round(rect.x * w)
+  const ry = Math.round(rect.y * h)
+  const rw = Math.round(rect.w * w)
+  const rh = Math.round(rect.h * h)
+  if (rw <= 0 || rh <= 0) return
   ctx.save()
-  ctx.fillStyle = active ? 'rgba(0,0,0,0.55)' : 'rgba(0,0,0,0.9)'
-  if (active) {
-    ctx.strokeStyle = 'rgba(255,255,255,0.9)'
-    ctx.lineWidth = 2
-    ctx.setLineDash([6, 4])
-  }
-  for (const r of rects) {
-    const rx = Math.round(r.x * w)
-    const ry = Math.round(r.y * h)
-    const rw = Math.round(r.w * w)
-    const rh = Math.round(r.h * h)
-    if (rw <= 0 || rh <= 0) continue
-    ctx.fillRect(rx, ry, rw, rh)
-    if (active) ctx.strokeRect(rx, ry, rw, rh)
-  }
+  ctx.fillStyle = 'rgba(0,0,0,0.4)'
+  ctx.fillRect(rx, ry, rw, rh)
+  ctx.strokeStyle = 'rgba(255,255,255,0.9)'
+  ctx.lineWidth = 2
+  ctx.setLineDash([6, 4])
+  ctx.strokeRect(rx, ry, rw, rh)
   ctx.restore()
+}
+
+/**
+ * Draw just the base page bitmap to a target canvas, at the same intrinsic
+ * size as the composite. Used by the "before/after" compare mode.
+ */
+export function drawOriginal(target: HTMLCanvasElement, page: RenderedPage): void {
+  const ctx = target.getContext('2d', { alpha: false })
+  if (!ctx) return
+  target.width = page.intrinsicWidth
+  target.height = page.intrinsicHeight
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.fillStyle = '#ffffff'
+  ctx.fillRect(0, 0, target.width, target.height)
+  ctx.drawImage(page.bitmap, 0, 0, target.width, target.height)
 }

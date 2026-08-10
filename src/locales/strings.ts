@@ -49,6 +49,15 @@ export interface Strings {
     redactClear: string
     redactCount: (n: number) => string
     redactPdfLimitation: string
+    redactModeLabel: string
+    redactModeSolid: string
+    redactModeBlur: string
+    redactModePixelate: string
+    redactModeHint: string
+    compareLabel: string
+    compareProtected: string
+    compareSlider: string
+    compareOriginal: string
     pageStripLabel: string
     pageStripCapped: (rendered: number, total: number) => string
     pageStripCurrent: (current: number, total: number) => string
@@ -151,6 +160,15 @@ export const enStrings: Strings = {
     redactClear: 'Clear all',
     redactCount: (n) => `${n} region${n === 1 ? '' : 's'} hidden`,
     redactPdfLimitation: 'Hidden regions apply to the page you are viewing. Switch pages to hide regions on others.',
+    redactModeLabel: 'Hide style',
+    redactModeSolid: 'Solid',
+    redactModeBlur: 'Blur',
+    redactModePixelate: 'Pixelate',
+    redactModeHint: 'Solid is safest. Blur and pixelate may partially reveal what is under them.',
+    compareLabel: 'View',
+    compareProtected: 'Protected',
+    compareSlider: 'Compare',
+    compareOriginal: 'Original',
     pageStripLabel: 'Pages',
     pageStripCapped: (rendered, total) => `Showing first ${rendered} of ${total} pages`,
     pageStripCurrent: (current, total) => `Page ${current} of ${total}`,
@@ -262,6 +280,15 @@ export const esStrings: Strings = {
     redactClear: 'Borrar todo',
     redactCount: (n) => `${n} zona${n === 1 ? '' : 's'} oculta${n === 1 ? '' : 's'}`,
     redactPdfLimitation: 'Las zonas ocultas se aplican a la página que estás viendo. Cambia de página para ocultar zonas en otras.',
+    redactModeLabel: 'Estilo de ocultación',
+    redactModeSolid: 'Sólido',
+    redactModeBlur: 'Desenfoque',
+    redactModePixelate: 'Pixelado',
+    redactModeHint: 'Sólido es lo más seguro. Desenfoque y pixelado pueden revelar parte de lo que hay debajo.',
+    compareLabel: 'Vista',
+    compareProtected: 'Protegido',
+    compareSlider: 'Comparar',
+    compareOriginal: 'Original',
     pageStripLabel: 'Páginas',
     pageStripCapped: (rendered, total) => `Mostrando las primeras ${rendered} de ${total} páginas`,
     pageStripCurrent: (current, total) => `Página ${current} de ${total}`,
