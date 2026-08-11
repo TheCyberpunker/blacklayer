@@ -103,8 +103,11 @@ export interface Strings {
     patternCrosshatchHint: string
     patternFrameLabel: string
     patternFrameHint: string
+    patternIridescentLabel: string
+    patternIridescentHint: string
     appliedCrosshatch: string
     appliedFrame: string
+    appliedIridescent: string
     presetsLabel: string
     presetsEmptyHint: string
     presetsSave: string
@@ -358,8 +361,11 @@ export const enStrings: Strings = {
     patternCrosshatchHint: 'Thin diagonal lines across the whole page. Makes automated watermark removal harder.',
     patternFrameLabel: 'Add border frame',
     patternFrameHint: 'Two thin borders around the page.',
+    patternIridescentLabel: 'Add iridescent overlay',
+    patternIridescentHint: 'A decorative rainbow gradient with a fine dot texture. Distinctly visible as a user-added watermark, not a real security foil.',
     appliedCrosshatch: 'Crosshatch pattern applied',
     appliedFrame: 'Border frame applied',
+    appliedIridescent: 'Iridescent overlay applied',
     presetsLabel: 'Presets',
     presetsEmptyHint: 'Save the current recipient, purpose, and protection level as a preset for next time.',
     presetsSave: 'Save current as preset',
@@ -615,8 +621,11 @@ export const esStrings: Strings = {
     patternCrosshatchHint: 'Líneas diagonales finas sobre toda la página. Dificulta la eliminación automática de la marca.',
     patternFrameLabel: 'Añadir marco',
     patternFrameHint: 'Dos bordes finos alrededor de la página.',
+    patternIridescentLabel: 'Añadir capa iridiscente',
+    patternIridescentHint: 'Un degradado decorativo con una textura de puntos fina. Se ve claramente como una marca añadida, no como un holograma real de seguridad.',
     appliedCrosshatch: 'Patrón de trama aplicado',
     appliedFrame: 'Marco aplicado',
+    appliedIridescent: 'Capa iridiscente aplicada',
     presetsLabel: 'Ajustes guardados',
     presetsEmptyHint: 'Guarda el destinatario, motivo y nivel actuales como un ajuste para la próxima vez.',
     presetsSave: 'Guardar como ajuste',

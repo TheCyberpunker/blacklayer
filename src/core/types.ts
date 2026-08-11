@@ -55,6 +55,12 @@ export interface WatermarkOptions {
   patterns: {
     crosshatch: boolean
     frame: boolean
+    /**
+     * Distinctly decorative iridescent (holographic-style) gradient overlay.
+     * Intentionally reads as a user-added watermark, not as a real official
+     * hologram foil.
+     */
+    iridescent: boolean
   }
 }
 
@@ -65,11 +71,12 @@ export interface ProtectionProfile {
 }
 
 const BASE_COLOR = { r: 0.1, g: 0.1, b: 0.1 }
-const NO_PATTERNS = { crosshatch: false, frame: false }
+const NO_PATTERNS = { crosshatch: false, frame: false, iridescent: false }
 
 export interface ProfileOverrides {
   crosshatch?: boolean
   frame?: boolean
+  iridescent?: boolean
   opacity?: number
   rotationDeg?: number
   fontSize?: number
@@ -95,6 +102,7 @@ export function profileFor(
       patterns: {
         crosshatch: overrides.crosshatch ?? base.watermark.patterns.crosshatch,
         frame: overrides.frame ?? base.watermark.patterns.frame,
+        iridescent: overrides.iridescent ?? base.watermark.patterns.iridescent,
       },
     },
   }
@@ -152,7 +160,7 @@ function baseProfile(level: ProtectionLevel, text: WatermarkText): ProtectionPro
           color: BASE_COLOR,
           seed: 0,
           jitter: 0,
-          patterns: { crosshatch: true, frame: true },
+          patterns: { crosshatch: true, frame: true, iridescent: false },
         },
         metadata: 'neutralize',
       }

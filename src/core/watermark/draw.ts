@@ -58,8 +58,55 @@ export function drawWatermarkOnCanvas({
     }
   }
 
+  if (options.patterns.iridescent) drawIridescent(ctx, width, height, options)
   if (options.patterns.crosshatch) drawCrosshatch(ctx, width, height, options, colorBase)
   if (options.patterns.frame) drawFrame(ctx, width, height, options, colorBase)
+}
+
+/**
+ * Decorative iridescent overlay — diagonal linear gradient across magenta,
+ * cyan, and gold at low alpha, plus a fine dot texture on top. Intentionally
+ * reads as an added visual layer rather than as a real security foil, so that
+ * a viewer cannot mistake the exported copy for a genuine, holographically
+ * laminated document.
+ */
+function drawIridescent(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  options: WatermarkOptions,
+): void {
+  // Gradient alpha scales with base opacity so it stays roughly in visual sync
+  // with the text mark. Clamped so it never overpowers the document content.
+  const gradAlpha = Math.max(0.06, Math.min(0.18, options.opacity * 0.5))
+  ctx.save()
+  const g = ctx.createLinearGradient(0, 0, width, height)
+  g.addColorStop(0, `rgba(255, 0, 214, ${gradAlpha})`) // magenta
+  g.addColorStop(0.35, `rgba(0, 199, 255, ${gradAlpha})`) // cyan
+  g.addColorStop(0.7, `rgba(140, 255, 100, ${gradAlpha * 0.8})`) // green tint
+  g.addColorStop(1, `rgba(255, 194, 0, ${gradAlpha})`) // gold
+  ctx.fillStyle = g
+  ctx.globalCompositeOperation = 'source-over'
+  ctx.fillRect(0, 0, width, height)
+  ctx.restore()
+
+  // Fine dot texture on top — a sparse grid of ~1px white dots at very low
+  // alpha, which adds a subtle "print" grain that reads as decorative rather
+  // than as a genuine security feature.
+  const scaleFactor = Math.min(width, height) / 800
+  const step = Math.max(6, 8 * scaleFactor)
+  const dotAlpha = Math.max(0.05, Math.min(0.15, options.opacity * 0.4))
+  const radius = Math.max(0.4, 0.6 * scaleFactor)
+  ctx.save()
+  ctx.fillStyle = `rgba(255, 255, 255, ${dotAlpha})`
+  for (let y = step / 2; y < height; y += step) {
+    for (let x = step / 2; x < width; x += step) {
+      ctx.beginPath()
+      ctx.arc(x, y, radius, 0, Math.PI * 2)
+      ctx.fill()
+    }
+  }
+  ctx.restore()
 }
 
 function drawSingleMark(

@@ -190,6 +190,7 @@ export function App(): JSX.Element {
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [crosshatchOverride, setCrosshatchOverride] = useState<boolean | null>(null)
   const [frameOverride, setFrameOverride] = useState<boolean | null>(null)
+  const [iridescentOverride, setIridescentOverride] = useState<boolean | null>(null)
   const [opacityOverride, setOpacityOverride] = useState<number | null>(null)
   const [rotationOverride, setRotationOverride] = useState<number | null>(null)
   const [fontSizeOverride, setFontSizeOverride] = useState<number | null>(null)
@@ -253,13 +254,14 @@ export function App(): JSX.Element {
         {
           crosshatch: crosshatchOverride ?? undefined,
           frame: frameOverride ?? undefined,
+          iridescent: iridescentOverride ?? undefined,
           opacity: opacityOverride ?? undefined,
           rotationDeg: rotationOverride ?? undefined,
           fontSize: fontSizeOverride ?? undefined,
           color: colorOverride ? hexToRgb01(colorOverride) : undefined,
         },
       ),
-    [level, debouncedRecipient, debouncedPurpose, lang, effectiveCustom, docSeed, crosshatchOverride, frameOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride],
+    [level, debouncedRecipient, debouncedPurpose, lang, effectiveCustom, docSeed, crosshatchOverride, frameOverride, iridescentOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride],
   )
 
   const activePageRedactions = redactionsByPage.get(activePageIndex) ?? []
@@ -371,6 +373,7 @@ export function App(): JSX.Element {
           setAdvancedOpen(false)
           setCrosshatchOverride(null)
           setFrameOverride(null)
+          setIridescentOverride(null)
           setOpacityOverride(null)
           setRotationOverride(null)
           setFontSizeOverride(null)
@@ -563,6 +566,7 @@ export function App(): JSX.Element {
     setAdvancedOpen(false)
     setCrosshatchOverride(null)
     setFrameOverride(null)
+    setIridescentOverride(null)
     setOpacityOverride(null)
     setRotationOverride(null)
     setFontSizeOverride(null)
@@ -668,6 +672,7 @@ export function App(): JSX.Element {
         {
           crosshatch: crosshatchOverride ?? undefined,
           frame: frameOverride ?? undefined,
+          iridescent: iridescentOverride ?? undefined,
           opacity: opacityOverride ?? undefined,
           rotationDeg: rotationOverride ?? undefined,
           fontSize: fontSizeOverride ?? undefined,
@@ -716,7 +721,7 @@ export function App(): JSX.Element {
     } finally {
       setWorking(false)
     }
-  }, [loaded, level, recipient, purpose, lang, customEnabled, customText, redactionsByPage, docSeed, crosshatchOverride, frameOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride, t, clearOutput])
+  }, [loaded, level, recipient, purpose, lang, customEnabled, customText, redactionsByPage, docSeed, crosshatchOverride, frameOverride, iridescentOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride, t, clearOutput])
 
   const protectBatch = useCallback(async () => {
     if (!batch.length) return
@@ -1500,8 +1505,10 @@ export function App(): JSX.Element {
             onToggleAdvanced={() => setAdvancedOpen((v) => !v)}
             crosshatchOn={previewProfile.watermark.patterns.crosshatch}
             frameOn={previewProfile.watermark.patterns.frame}
+            iridescentOn={previewProfile.watermark.patterns.iridescent}
             onCrosshatchChange={(v) => setCrosshatchOverride(v)}
             onFrameChange={(v) => setFrameOverride(v)}
+            onIridescentChange={(v) => setIridescentOverride(v)}
             customEnabled={customEnabled}
             customText={customText}
             onToggleCustom={() => setCustomEnabled((v) => !v)}
@@ -1553,8 +1560,10 @@ export function App(): JSX.Element {
             onToggleAdvanced={() => setAdvancedOpen((v) => !v)}
             crosshatchOn={previewProfile.watermark.patterns.crosshatch}
             frameOn={previewProfile.watermark.patterns.frame}
+            iridescentOn={previewProfile.watermark.patterns.iridescent}
             onCrosshatchChange={(v) => setCrosshatchOverride(v)}
             onFrameChange={(v) => setFrameOverride(v)}
+            onIridescentChange={(v) => setIridescentOverride(v)}
             opacity={previewProfile.watermark.opacity}
             rotationDeg={previewProfile.watermark.rotationDeg}
             fontSize={previewProfile.watermark.fontSize}
@@ -2009,8 +2018,10 @@ interface WorkspaceProps {
   onToggleAdvanced: () => void
   crosshatchOn: boolean
   frameOn: boolean
+  iridescentOn: boolean
   onCrosshatchChange: (v: boolean) => void
   onFrameChange: (v: boolean) => void
+  onIridescentChange: (v: boolean) => void
   opacity: number
   rotationDeg: number
   fontSize: number
@@ -2121,8 +2132,10 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     onToggleAdvanced,
     crosshatchOn,
     frameOn,
+    iridescentOn,
     onCrosshatchChange,
     onFrameChange,
+    onIridescentChange,
     opacity,
     rotationDeg,
     fontSize,
@@ -2788,6 +2801,12 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                 checked={frameOn}
                 onChange={onFrameChange}
               />
+              <PatternToggle
+                label={strings.workspace.patternIridescentLabel}
+                hint={strings.workspace.patternIridescentHint}
+                checked={iridescentOn}
+                onChange={onIridescentChange}
+              />
               <CustomTextBlock
                 enabled={customEnabled}
                 onToggle={onToggleCustom}
@@ -2866,6 +2885,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               )}
               {crosshatchOn && <AppliedItem>{strings.workspace.appliedCrosshatch}</AppliedItem>}
               {frameOn && <AppliedItem>{strings.workspace.appliedFrame}</AppliedItem>}
+              {iridescentOn && <AppliedItem>{strings.workspace.appliedIridescent}</AppliedItem>}
               {redactionsCount > 0 && (
                 <AppliedItem>{strings.result.appliedRedactions(redactionsCount)}</AppliedItem>
               )}
@@ -3068,8 +3088,10 @@ interface BatchWorkspaceProps {
   onToggleAdvanced: () => void
   crosshatchOn: boolean
   frameOn: boolean
+  iridescentOn: boolean
   onCrosshatchChange: (v: boolean) => void
   onFrameChange: (v: boolean) => void
+  onIridescentChange: (v: boolean) => void
   customEnabled: boolean
   customText: string
   onToggleCustom: () => void
@@ -3103,8 +3125,10 @@ function BatchWorkspace(props: BatchWorkspaceProps): JSX.Element {
     onToggleAdvanced,
     crosshatchOn,
     frameOn,
+    iridescentOn,
     onCrosshatchChange,
     onFrameChange,
+    onIridescentChange,
     customEnabled,
     customText,
     onToggleCustom,
@@ -3270,6 +3294,12 @@ function BatchWorkspace(props: BatchWorkspaceProps): JSX.Element {
                 hint={strings.workspace.patternFrameHint}
                 checked={frameOn}
                 onChange={onFrameChange}
+              />
+              <PatternToggle
+                label={strings.workspace.patternIridescentLabel}
+                hint={strings.workspace.patternIridescentHint}
+                checked={iridescentOn}
+                onChange={onIridescentChange}
               />
               <CustomTextBlock
                 enabled={customEnabled}
