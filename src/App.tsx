@@ -171,6 +171,12 @@ export function App(): JSX.Element {
   const [searching, setSearching] = useState(false)
   const [searchSummary, setSearchSummary] = useState<{ matches: number; pages: number } | null>(null)
   const [adjusting, setAdjusting] = useState(false)
+  // Image adjustments live as flags on top of an immutable original file.
+  // Every toggle re-derives the working file from the original, so grayscale is
+  // reversible and rotations always start from the same base.
+  const [originalImageFile, setOriginalImageFile] = useState<File | null>(null)
+  const [imageRotationDeg, setImageRotationDeg] = useState<number>(0)
+  const [imageGrayscale, setImageGrayscale] = useState<boolean>(false)
   const [redactionsByPage, setRedactionsByPage] = useState<Map<number, RedactionRect[]>>(new Map())
   const [redactMode, setRedactMode] = useState(false)
   const [redactStyle, setRedactStyle] = useState<RedactionMode>('solid')
@@ -277,6 +283,69 @@ export function App(): JSX.Element {
     setOutputName('')
   }, [])
 
+  // Low-level loader used both by fresh drops and by the adjustments effect.
+  // Does everything a fresh drop does *except* touch originalImageFile / the
+  // adjustment flags — those are the responsibility of the caller.
+  const loadFileIntoState = useCallback(
+    async (f: File, kind: 'pdf' | 'image', resetAdjustmentDependent: boolean) => {
+      setLoading(true)
+      try {
+        const { renderBase } = await import('./core/preview/render.ts')
+        const base = await renderBase(f)
+        let hasSignature = false
+        if (kind === 'pdf') {
+          try {
+            const { inspectPdf } = await import('./core/pdf/watermark.ts')
+            const info = await inspectPdf(await f.arrayBuffer())
+            hasSignature = info.hasSignature
+          } catch {
+            // best-effort
+          }
+        }
+        const loadedFile: LoadedFile = { file: f, kind, base, hasSignature }
+        setLoaded(loadedFile)
+        setActivePageIndex(0)
+
+        if (resetAdjustmentDependent) {
+          setRedactionsByPage(new Map())
+          setRedactMode(false)
+          setRedactStyle('solid')
+          setTemplateSide('anverso')
+          setCustomEnabled(false)
+          setCustomText('')
+          setLevelTouched(false)
+          setLevel('recommended')
+          setDocSeed(generateSeed())
+          setAdvancedOpen(false)
+          setCrosshatchOverride(null)
+          setFrameOverride(null)
+          setOpacityOverride(null)
+          setRotationOverride(null)
+          setFontSizeOverride(null)
+          setColorOverride(null)
+          setRedactSolidColor('#000000')
+        }
+
+        // Detection can be re-run for every load; it is cheap enough.
+        void (async () => {
+          try {
+            const { detectDocument } = await import('./core/detect/detect.ts')
+            const result = await detectDocument(f, base)
+            setDetection(result)
+          } catch {
+            setDetection(UNKNOWN_DETECTION)
+          }
+        })()
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        setError(`${t.errors.failed}: ${msg}`)
+      } finally {
+        setLoading(false)
+      }
+    },
+    [t],
+  )
+
   const onFiles = useCallback(
     async (list: FileList | null | undefined) => {
       if (!list || list.length === 0) return
@@ -320,61 +389,17 @@ export function App(): JSX.Element {
         setError(t.errors.unsupported)
         return
       }
-      setLoading(true)
-      try {
-        const { renderBase } = await import('./core/preview/render.ts')
-        const base = await renderBase(f)
-        let hasSignature = false
-        if (kind === 'pdf') {
-          try {
-            const { inspectPdf } = await import('./core/pdf/watermark.ts')
-            const info = await inspectPdf(await f.arrayBuffer())
-            hasSignature = info.hasSignature
-          } catch {
-            // best-effort
-          }
-        }
-        const loadedFile: LoadedFile = { file: f, kind, base, hasSignature }
-        setLoaded(loadedFile)
-        setActivePageIndex(0)
-        setRedactionsByPage(new Map())
-        setRedactMode(false)
-        setRedactStyle('solid')
-        setTemplateSide('anverso')
-        setCompareMode('protected')
-        setDividerX(0.5)
-        setCustomEnabled(false)
-        setCustomText('')
-        setLevelTouched(false)
-        setLevel('recommended')
-        setDocSeed(generateSeed())
-        setAdvancedOpen(false)
-        setCrosshatchOverride(null)
-        setFrameOverride(null)
-        setOpacityOverride(null)
-        setRotationOverride(null)
-        setFontSizeOverride(null)
-        setColorOverride(null)
-        setRedactSolidColor('#000000')
-
-        // Run detection async; do not block the UI.
-        void (async () => {
-          try {
-            const { detectDocument } = await import('./core/detect/detect.ts')
-            const result = await detectDocument(f, base)
-            setDetection(result)
-          } catch {
-            setDetection(UNKNOWN_DETECTION)
-          }
-        })()
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err)
-        setError(`${t.errors.failed}: ${msg}`)
-      } finally {
-        setLoading(false)
-      }
+      // Fresh drop: capture the original (for reversible image adjustments) and
+      // reset the adjustment flags. Also reset the extras that are not covered
+      // by loadFileIntoState's reset path.
+      setOriginalImageFile(kind === 'image' ? f : null)
+      setImageRotationDeg(0)
+      setImageGrayscale(false)
+      setCompareMode('protected')
+      setDividerX(0.5)
+      await loadFileIntoState(f, kind, true)
     },
-    [t, clearOutput],
+    [t, clearOutput, loadFileIntoState],
   )
 
   const clearBatch = useCallback(() => {
@@ -402,6 +427,9 @@ export function App(): JSX.Element {
   const clearDoc = useCallback(() => {
     releaseBase(loaded?.base)
     setLoaded(null)
+    setOriginalImageFile(null)
+    setImageRotationDeg(0)
+    setImageGrayscale(false)
     setActivePageIndex(0)
     setRecipient('')
     setPurpose('')
@@ -925,28 +953,40 @@ export function App(): JSX.Element {
 
   const applyAdjust = useCallback(
     async (kind: 'rotate-left' | 'rotate-right' | 'grayscale') => {
-      if (!loaded || loaded.kind !== 'image') return
-      if (kind !== 'grayscale' && anyRedactions) {
+      if (!loaded || loaded.kind !== 'image' || !originalImageFile) return
+
+      // Compute the target adjustment values without mutating state yet, so
+      // the derivation always runs from the immutable original.
+      const willRotate = kind !== 'grayscale'
+      if (willRotate && anyRedactions) {
         if (!window.confirm(t.workspace.adjustConfirmClearRedactions)) return
       }
+      const nextRotation = willRotate
+        ? (imageRotationDeg + (kind === 'rotate-right' ? 90 : 270)) % 360
+        : imageRotationDeg
+      const nextGrayscale = kind === 'grayscale' ? !imageGrayscale : imageGrayscale
+
       setAdjusting(true)
       try {
         const mod = await import('./core/image/adjust.ts')
-        let result
-        if (kind === 'grayscale') result = await mod.grayscaleImageFile(loaded.file)
-        else if (kind === 'rotate-left') result = await mod.rotateImageFile(loaded.file, -90)
-        else result = await mod.rotateImageFile(loaded.file, 90)
-        const nextFile = mod.fileFromBlob(result.blob, result.filename, '')
-        // Feed it back through the normal drop path; onFiles handles renderBase,
-        // detection, and resets state consistently.
-        const dt = new DataTransfer()
-        dt.items.add(nextFile)
-        await onFiles(dt.files)
+        let file: File = originalImageFile
+        if (nextRotation !== 0) {
+          const r = await mod.rotateImageFile(file, nextRotation)
+          file = mod.fileFromBlob(r.blob, r.filename, '')
+        }
+        if (nextGrayscale) {
+          const r = await mod.grayscaleImageFile(file)
+          file = mod.fileFromBlob(r.blob, r.filename, '')
+        }
+        setImageRotationDeg(nextRotation)
+        setImageGrayscale(nextGrayscale)
+        if (willRotate && anyRedactions) setRedactionsByPage(new Map())
+        await loadFileIntoState(file, 'image', false)
       } finally {
         setAdjusting(false)
       }
     },
-    [loaded, anyRedactions, onFiles, t],
+    [loaded, originalImageFile, imageRotationDeg, imageGrayscale, anyRedactions, t, loadFileIntoState],
   )
 
   // ---------- Slider divider handlers ----------
@@ -1111,6 +1151,7 @@ export function App(): JSX.Element {
             onClearSearch={clearSearchRedactions}
             adjusting={adjusting}
             onAdjust={applyAdjust}
+            grayscaleActive={imageGrayscale}
             presets={presets}
             onApplyPreset={applyPreset}
             onSavePreset={onSaveCurrentPreset}
@@ -1542,6 +1583,7 @@ interface WorkspaceProps {
   onClearSearch: () => void
   adjusting: boolean
   onAdjust: (kind: 'rotate-left' | 'rotate-right' | 'grayscale') => void
+  grayscaleActive: boolean
   presets: Preset[]
   onApplyPreset: (p: Preset) => void
   onSavePreset: () => void
@@ -1634,6 +1676,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     onClearSearch,
     adjusting,
     onAdjust,
+    grayscaleActive,
     presets,
     onApplyPreset,
     onSavePreset,
@@ -1717,17 +1760,66 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             redactMode ? 'border-foreground/60' : 'border-border',
           )}
         >
-          <div className="mb-3 flex items-center justify-between gap-3">
+          <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
             <ComparePicker
               value={compareMode}
               onChange={onCompareModeChange}
               strings={strings}
             />
-            <span className="text-[11px] font-mono text-muted-foreground shrink-0">
-              {isMultiPage
-                ? strings.workspace.pageStripCurrent(activePageIndex + 1, loaded.base.totalPages)
-                : ''}
-            </span>
+            <div className="flex items-center gap-2">
+              {loaded.kind === 'image' && (
+                <div className="flex items-center gap-0.5">
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onAdjust('rotate-left')}
+                        disabled={adjusting}
+                        aria-label={strings.workspace.adjustRotateLeft}
+                      >
+                        <RotateCcw className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{strings.workspace.adjustRotateLeft}</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={() => onAdjust('rotate-right')}
+                        disabled={adjusting}
+                        aria-label={strings.workspace.adjustRotateRight}
+                      >
+                        <RotateCw className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{strings.workspace.adjustRotateRight}</TooltipContent>
+                  </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={grayscaleActive ? 'default' : 'ghost'}
+                        size="icon"
+                        onClick={() => onAdjust('grayscale')}
+                        disabled={adjusting}
+                        aria-label={strings.workspace.adjustGrayscale}
+                        aria-pressed={grayscaleActive}
+                      >
+                        <Contrast className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{strings.workspace.adjustGrayscale}</TooltipContent>
+                  </Tooltip>
+                </div>
+              )}
+              <span className="text-[11px] font-mono text-muted-foreground shrink-0">
+                {isMultiPage
+                  ? strings.workspace.pageStripCurrent(activePageIndex + 1, loaded.base.totalPages)
+                  : ''}
+              </span>
+            </div>
           </div>
 
           <div className="relative w-full aspect-[3/4] sm:aspect-auto sm:min-h-[520px] bg-white rounded-lg overflow-hidden shadow-sm">
