@@ -165,6 +165,11 @@ export interface Strings {
     adjustRotateLeft: string
     adjustRotateRight: string
     adjustGrayscale: string
+    adjustCrop: string
+    adjustCropHint: string
+    adjustCropApply: string
+    adjustCropCancel: string
+    adjustCropTooSmall: string
     adjustConfirmClearRedactions: string
   }
   result: {
@@ -397,7 +402,12 @@ export const enStrings: Strings = {
     adjustRotateLeft: 'Rotate left',
     adjustRotateRight: 'Rotate right',
     adjustGrayscale: 'Black & white',
-    adjustConfirmClearRedactions: 'Rotating the image will clear the redactions you drew. Continue?',
+    adjustCrop: 'Crop',
+    adjustCropHint: 'Drag on the image to select the area to keep.',
+    adjustCropApply: 'Apply crop',
+    adjustCropCancel: 'Cancel',
+    adjustCropTooSmall: 'Selection is too small.',
+    adjustConfirmClearRedactions: 'This adjustment will clear the redactions you drew. Continue?',
   },
   result: {
     ready: 'Your protected copy is ready',
@@ -629,7 +639,12 @@ export const esStrings: Strings = {
     adjustRotateLeft: 'Girar a la izquierda',
     adjustRotateRight: 'Girar a la derecha',
     adjustGrayscale: 'Blanco y negro',
-    adjustConfirmClearRedactions: 'Girar la imagen eliminará las zonas que hayas ocultado. ¿Continuar?',
+    adjustCrop: 'Recortar',
+    adjustCropHint: 'Arrastra sobre la imagen para seleccionar la zona a mantener.',
+    adjustCropApply: 'Aplicar recorte',
+    adjustCropCancel: 'Cancelar',
+    adjustCropTooSmall: 'La selección es demasiado pequeña.',
+    adjustConfirmClearRedactions: 'Este ajuste eliminará las zonas que hayas ocultado. ¿Continuar?',
   },
   result: {
     ready: 'Tu copia protegida está lista',

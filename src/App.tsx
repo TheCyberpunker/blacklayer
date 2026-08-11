@@ -34,7 +34,7 @@ import { purposesFor, recommendedLevel } from './core/detect/templates.ts'
 import { templateFor, type CardSide, type DocumentTemplate, type FieldRect, type TemplateProfile } from './core/templates/index.ts'
 import { generateSeed } from './core/random/seed.ts'
 import { hexToRgb01, rgb01ToHex } from './lib/color.ts'
-import { Contrast, RotateCcw, RotateCw, Search } from 'lucide-react'
+import { Contrast, Crop, RotateCcw, RotateCw, Search } from 'lucide-react'
 import { Button } from './components/ui/button.tsx'
 import { Input } from './components/ui/input.tsx'
 import { Label } from './components/ui/label.tsx'
@@ -177,6 +177,8 @@ export function App(): JSX.Element {
   const [originalImageFile, setOriginalImageFile] = useState<File | null>(null)
   const [imageRotationDeg, setImageRotationDeg] = useState<number>(0)
   const [imageGrayscale, setImageGrayscale] = useState<boolean>(false)
+  const [cropMode, setCropMode] = useState(false)
+  const [cropRect, setCropRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
   const [redactionsByPage, setRedactionsByPage] = useState<Map<number, RedactionRect[]>>(new Map())
   const [redactMode, setRedactMode] = useState(false)
   const [redactStyle, setRedactStyle] = useState<RedactionMode>('solid')
@@ -395,6 +397,8 @@ export function App(): JSX.Element {
       setOriginalImageFile(kind === 'image' ? f : null)
       setImageRotationDeg(0)
       setImageGrayscale(false)
+      setCropMode(false)
+      setCropRect(null)
       setCompareMode('protected')
       setDividerX(0.5)
       await loadFileIntoState(f, kind, true)
@@ -430,6 +434,8 @@ export function App(): JSX.Element {
     setOriginalImageFile(null)
     setImageRotationDeg(0)
     setImageGrayscale(false)
+    setCropMode(false)
+    setCropRect(null)
     setActivePageIndex(0)
     setRecipient('')
     setPurpose('')
@@ -718,41 +724,61 @@ export function App(): JSX.Element {
 
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (!redactMode || !loaded || compareMode !== 'protected') return
-      e.preventDefault()
-      ;(e.target as Element).setPointerCapture?.(e.pointerId)
+      if (!loaded || compareMode !== 'protected') return
       const p = canvasToNormalized(e.clientX, e.clientY)
       if (!p) return
+      if (cropMode) {
+        e.preventDefault()
+        ;(e.target as Element).setPointerCapture?.(e.pointerId)
+        dragStartRef.current = p
+        setCropRect({ x: p.x, y: p.y, w: 0, h: 0 })
+        return
+      }
+      if (!redactMode) return
+      e.preventDefault()
+      ;(e.target as Element).setPointerCapture?.(e.pointerId)
       dragStartRef.current = p
       setActiveRect({ id: 'active', x: p.x, y: p.y, w: 0, h: 0, mode: redactStyle })
     },
-    [redactMode, loaded, canvasToNormalized, compareMode, redactStyle],
+    [redactMode, cropMode, loaded, canvasToNormalized, compareMode, redactStyle],
   )
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (!redactMode || !dragStartRef.current) return
+      if (!dragStartRef.current) return
       const p = canvasToNormalized(e.clientX, e.clientY)
       if (!p) return
       const start = dragStartRef.current
-      setActiveRect({
-        id: 'active',
+      const rect = {
         x: Math.min(start.x, p.x),
         y: Math.min(start.y, p.y),
         w: Math.abs(p.x - start.x),
         h: Math.abs(p.y - start.y),
+      }
+      if (cropMode) {
+        setCropRect(rect)
+        return
+      }
+      if (!redactMode) return
+      setActiveRect({
+        id: 'active',
+        ...rect,
         mode: redactStyle,
       })
     },
-    [redactMode, canvasToNormalized, redactStyle],
+    [redactMode, cropMode, canvasToNormalized, redactStyle],
   )
 
   const onPointerUp = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (!redactMode) return
       ;(e.target as Element).releasePointerCapture?.(e.pointerId)
-      const rect = activeRect
       dragStartRef.current = null
+      if (cropMode) {
+        // Keep the selection for review; user confirms via Apply.
+        return
+      }
+      if (!redactMode) return
+      const rect = activeRect
       setActiveRect(null)
       if (!rect) return
       if (rect.w < MIN_RECT || rect.h < MIN_RECT) return
@@ -769,7 +795,7 @@ export function App(): JSX.Element {
         return next
       })
     },
-    [redactMode, activeRect, activePageIndex, redactStyle, redactSolidColor],
+    [redactMode, cropMode, activeRect, activePageIndex, redactStyle, redactSolidColor],
   )
 
   const undoRedaction = useCallback(() => {
@@ -950,6 +976,44 @@ export function App(): JSX.Element {
     for (const arr of redactionsByPage.values()) if (arr.length) return true
     return false
   }, [redactionsByPage])
+
+  const startCropMode = useCallback(() => {
+    setCropMode(true)
+    setCropRect(null)
+    // Turning on crop turns off redaction to avoid ambiguous pointer intent.
+    setRedactMode(false)
+  }, [])
+
+  const cancelCropMode = useCallback(() => {
+    setCropMode(false)
+    setCropRect(null)
+  }, [])
+
+  const applyCrop = useCallback(async () => {
+    if (!cropMode || !cropRect || !loaded || loaded.kind !== 'image') return
+    if (cropRect.w < MIN_RECT * 2 || cropRect.h < MIN_RECT * 2) return
+    // Warn if there are redactions; crop baked-in changes normalized coords.
+    if (anyRedactions) {
+      if (!window.confirm(t.workspace.adjustConfirmClearRedactions)) return
+    }
+    setAdjusting(true)
+    try {
+      const { cropImageFile, fileFromBlob } = await import('./core/image/adjust.ts')
+      // Crop the CURRENT loaded file (post rotation + grayscale). Reset the
+      // adjustment flags because those transforms are now baked into the crop.
+      const r = await cropImageFile(loaded.file, cropRect)
+      const newOriginal = fileFromBlob(r.blob, r.filename, '')
+      setOriginalImageFile(newOriginal)
+      setImageRotationDeg(0)
+      setImageGrayscale(false)
+      setCropMode(false)
+      setCropRect(null)
+      if (anyRedactions) setRedactionsByPage(new Map())
+      await loadFileIntoState(newOriginal, 'image', false)
+    } finally {
+      setAdjusting(false)
+    }
+  }, [cropMode, cropRect, loaded, anyRedactions, t, loadFileIntoState])
 
   const applyAdjust = useCallback(
     async (kind: 'rotate-left' | 'rotate-right' | 'grayscale') => {
@@ -1152,6 +1216,11 @@ export function App(): JSX.Element {
             adjusting={adjusting}
             onAdjust={applyAdjust}
             grayscaleActive={imageGrayscale}
+            cropMode={cropMode}
+            cropRect={cropRect}
+            onStartCrop={startCropMode}
+            onCancelCrop={cancelCropMode}
+            onApplyCrop={applyCrop}
             presets={presets}
             onApplyPreset={applyPreset}
             onSavePreset={onSaveCurrentPreset}
@@ -1584,6 +1653,11 @@ interface WorkspaceProps {
   adjusting: boolean
   onAdjust: (kind: 'rotate-left' | 'rotate-right' | 'grayscale') => void
   grayscaleActive: boolean
+  cropMode: boolean
+  cropRect: { x: number; y: number; w: number; h: number } | null
+  onStartCrop: () => void
+  onCancelCrop: () => void
+  onApplyCrop: () => void
   presets: Preset[]
   onApplyPreset: (p: Preset) => void
   onSavePreset: () => void
@@ -1677,6 +1751,11 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     adjusting,
     onAdjust,
     grayscaleActive,
+    cropMode,
+    cropRect,
+    onStartCrop,
+    onCancelCrop,
+    onApplyCrop,
     presets,
     onApplyPreset,
     onSavePreset,
@@ -1812,6 +1891,21 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                     </TooltipTrigger>
                     <TooltipContent>{strings.workspace.adjustGrayscale}</TooltipContent>
                   </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={cropMode ? 'default' : 'ghost'}
+                        size="icon"
+                        onClick={cropMode ? onCancelCrop : onStartCrop}
+                        disabled={adjusting}
+                        aria-label={strings.workspace.adjustCrop}
+                        aria-pressed={cropMode}
+                      >
+                        <Crop className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{strings.workspace.adjustCrop}</TooltipContent>
+                  </Tooltip>
                 </div>
               )}
               <span className="text-[11px] font-mono text-muted-foreground shrink-0">
@@ -1831,13 +1925,50 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               onPointerCancel={onPointerUp}
               className={cn(
                 'absolute inset-0 w-full h-full object-contain touch-none select-none transition-opacity',
-                redactMode && compareMode === 'protected' ? 'cursor-crosshair' : '',
+                (redactMode || cropMode) && compareMode === 'protected' ? 'cursor-crosshair' : '',
                 pageLoading ? 'opacity-50' : 'opacity-100',
               )}
               style={{
                 visibility: compareMode === 'original' ? 'hidden' : 'visible',
               }}
             />
+            {cropMode && cropRect && (
+              <div
+                className="pointer-events-none absolute border-2 border-white shadow-[0_0_0_1px_rgba(0,0,0,0.6)]"
+                style={{
+                  left: `${cropRect.x * 100}%`,
+                  top: `${cropRect.y * 100}%`,
+                  width: `${cropRect.w * 100}%`,
+                  height: `${cropRect.h * 100}%`,
+                  outline: '9999px solid rgba(0,0,0,0.35)',
+                  outlineOffset: '-2px',
+                }}
+              />
+            )}
+            {cropMode && (
+              <div className="absolute bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-2 z-20">
+                <Button variant="outline" size="sm" onClick={onCancelCrop} disabled={adjusting}>
+                  {strings.workspace.adjustCropCancel}
+                </Button>
+                <Button
+                  size="sm"
+                  onClick={onApplyCrop}
+                  disabled={
+                    adjusting ||
+                    !cropRect ||
+                    cropRect.w < MIN_RECT * 2 ||
+                    cropRect.h < MIN_RECT * 2
+                  }
+                >
+                  {strings.workspace.adjustCropApply}
+                </Button>
+              </div>
+            )}
+            {cropMode && !cropRect && (
+              <div className="pointer-events-none absolute bottom-14 left-1/2 -translate-x-1/2 rounded bg-black/70 text-white text-[11px] px-3 py-1.5 z-10">
+                {strings.workspace.adjustCropHint}
+              </div>
+            )}
             {pageLoading && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <div className="rounded-full bg-black/70 text-white text-[11px] font-mono uppercase tracking-wider px-3 py-1.5 animate-pulse">
@@ -2793,7 +2924,6 @@ function TemplatePanel({
               title={lang === 'es' ? p.descriptionEs : p.descriptionEn}
               className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full border border-border hover:border-foreground/50 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
             >
-              <span aria-hidden="true">{p.emoji}</span>
               {lang === 'es' ? p.labelEs : p.labelEn}
             </button>
           ))}

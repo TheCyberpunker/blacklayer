@@ -26,7 +26,6 @@ export interface TemplateProfile {
   id: string
   labelEn: string
   labelEs: string
-  emoji: string
   descriptionEn: string
   descriptionEs: string
   /** Field IDs this profile marks for censoring. */

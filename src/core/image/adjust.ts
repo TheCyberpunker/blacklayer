@@ -93,3 +93,35 @@ export function fileFromBlob(blob: Blob, originalName: string, tag: string): Fil
   const { stem, ext } = stemAndExt(originalName)
   return new File([blob], `${stem}${tag}${ext}`, { type: blob.type, lastModified: Date.now() })
 }
+
+/**
+ * Crop an image to the given normalized rectangle (top-left origin, values in
+ * 0..1). The output is bytes-of-the-crop-region only, so the resulting image is
+ * strictly smaller than the input.
+ */
+export async function cropImageFile(
+  file: File,
+  rect: { x: number; y: number; w: number; h: number },
+): Promise<AdjustResult> {
+  const bitmap = await createImageBitmap(file)
+  const sx = Math.max(0, Math.floor(rect.x * bitmap.width))
+  const sy = Math.max(0, Math.floor(rect.y * bitmap.height))
+  const sw = Math.min(bitmap.width - sx, Math.max(1, Math.floor(rect.w * bitmap.width)))
+  const sh = Math.min(bitmap.height - sy, Math.max(1, Math.floor(rect.h * bitmap.height)))
+  if (sw < 1 || sh < 1) {
+    bitmap.close?.()
+    throw new Error('crop rectangle is empty')
+  }
+  const canvas = document.createElement('canvas')
+  canvas.width = sw
+  canvas.height = sh
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('canvas 2d context unavailable')
+  ctx.imageSmoothingEnabled = true
+  ctx.imageSmoothingQuality = 'high'
+  ctx.drawImage(bitmap, sx, sy, sw, sh, 0, 0, sw, sh)
+  bitmap.close?.()
+  const mime = chooseMimeFrom(file)
+  const blob = await encode(canvas, mime)
+  return { blob, filename: file.name }
+}
