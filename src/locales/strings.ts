@@ -171,6 +171,8 @@ export interface Strings {
     adjustCropCancel: string
     adjustCropTooSmall: string
     adjustConfirmClearRedactions: string
+    selectionHint: string
+    deleteSelected: string
   }
   result: {
     ready: string
@@ -408,6 +410,8 @@ export const enStrings: Strings = {
     adjustCropCancel: 'Cancel',
     adjustCropTooSmall: 'Selection is too small.',
     adjustConfirmClearRedactions: 'This adjustment will clear the redactions you drew. Continue?',
+    selectionHint: 'Click a hidden area to move or resize it. Delete removes it, Esc deselects.',
+    deleteSelected: 'Delete selected',
   },
   result: {
     ready: 'Your protected copy is ready',
@@ -645,6 +649,8 @@ export const esStrings: Strings = {
     adjustCropCancel: 'Cancelar',
     adjustCropTooSmall: 'La selección es demasiado pequeña.',
     adjustConfirmClearRedactions: 'Este ajuste eliminará las zonas que hayas ocultado. ¿Continuar?',
+    selectionHint: 'Toca una zona oculta para moverla o cambiar su tamaño. Supr la elimina, Esc deselecciona.',
+    deleteSelected: 'Eliminar selección',
   },
   result: {
     ready: 'Tu copia protegida está lista',

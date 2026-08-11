@@ -12,6 +12,7 @@ export interface CompositeArgs {
   lang: Lang
   redactions?: readonly RedactionRect[]
   activeRect?: RedactionRect | null
+  selectedRectId?: string | null
 }
 
 export function composite({
@@ -21,6 +22,7 @@ export function composite({
   lang,
   redactions,
   activeRect,
+  selectedRectId,
 }: CompositeArgs): void {
   const ctx = target.getContext('2d', { alpha: false })
   if (!ctx) return
@@ -39,6 +41,10 @@ export function composite({
   }
   if (activeRect) {
     drawActiveDragOverlay(ctx, target.width, target.height, activeRect)
+  }
+  if (selectedRectId && redactions) {
+    const sel = redactions.find((r) => r.id === selectedRectId)
+    if (sel) drawSelectionOverlay(ctx, target.width, target.height, sel)
   }
 
   const lines = formatWatermarkLines(options.text, lang)
@@ -83,6 +89,44 @@ function drawActiveDragOverlay(
   ctx.lineWidth = 2
   ctx.setLineDash([6, 4])
   ctx.strokeRect(rx, ry, rw, rh)
+  ctx.restore()
+}
+
+/**
+ * Selection overlay for a committed rectangle: dashed white outline + small
+ * corner square at the bottom-right acting as the resize handle. Drawn on top
+ * of everything so the user always sees it, even over destructive redaction fill.
+ */
+function drawSelectionOverlay(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  rect: RedactionRect,
+): void {
+  const rx = Math.round(rect.x * w)
+  const ry = Math.round(rect.y * h)
+  const rw = Math.round(rect.w * w)
+  const rh = Math.round(rect.h * h)
+  if (rw <= 0 || rh <= 0) return
+  const handle = Math.max(10, Math.min(20, Math.min(rw, rh) / 4))
+
+  ctx.save()
+  // Dashed white outline + inner shadow for contrast against any background.
+  ctx.strokeStyle = 'rgba(255,255,255,0.95)'
+  ctx.lineWidth = 2
+  ctx.setLineDash([6, 4])
+  ctx.strokeRect(rx, ry, rw, rh)
+  ctx.setLineDash([])
+  ctx.strokeStyle = 'rgba(0,0,0,0.55)'
+  ctx.lineWidth = 1
+  ctx.strokeRect(rx - 1, ry - 1, rw + 2, rh + 2)
+
+  // Bottom-right resize handle.
+  ctx.fillStyle = 'rgba(255,255,255,0.95)'
+  ctx.strokeStyle = 'rgba(0,0,0,0.6)'
+  ctx.lineWidth = 1
+  ctx.fillRect(rx + rw - handle, ry + rh - handle, handle, handle)
+  ctx.strokeRect(rx + rw - handle, ry + rh - handle, handle, handle)
   ctx.restore()
 }
 

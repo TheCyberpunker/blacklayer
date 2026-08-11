@@ -179,6 +179,12 @@ export function App(): JSX.Element {
   const [imageGrayscale, setImageGrayscale] = useState<boolean>(false)
   const [cropMode, setCropMode] = useState(false)
   const [cropRect, setCropRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  const [selectedRectId, setSelectedRectId] = useState<string | null>(null)
+  // Drag interaction on the preview canvas has four possible modes: creating a
+  // new redaction rect, moving an existing one, resizing an existing one via
+  // its bottom-right handle, or drawing a crop selection. Only one at a time.
+  const dragModeRef = useRef<null | 'draw' | 'move' | 'resize' | 'crop'>(null)
+  const dragOffsetRef = useRef<{ dx: number; dy: number }>({ dx: 0, dy: 0 })
   const [redactionsByPage, setRedactionsByPage] = useState<Map<number, RedactionRect[]>>(new Map())
   const [redactMode, setRedactMode] = useState(false)
   const [redactStyle, setRedactStyle] = useState<RedactionMode>('solid')
@@ -266,8 +272,9 @@ export function App(): JSX.Element {
       lang,
       redactions: activePageRedactions,
       activeRect,
+      selectedRectId,
     })
-  }, [loaded, activePage, previewProfile, lang, activePageRedactions, activeRect])
+  }, [loaded, activePage, previewProfile, lang, activePageRedactions, activeRect, selectedRectId])
 
   // Draw the untouched original into the overlay canvas whenever compare mode
   // shows it or the active page changes.
@@ -283,6 +290,7 @@ export function App(): JSX.Element {
       return null
     })
     setOutputName('')
+    setSelectedRectId(null)
   }, [])
 
   // Low-level loader used both by fresh drops and by the adjustments effect.
@@ -722,62 +730,157 @@ export function App(): JSX.Element {
     [],
   )
 
+  // Aspect-ratio-aware hit test that returns a rect if p lies inside it, and
+  // whether it lies inside the bottom-right handle (resize) or the body (move).
+  const hitTestRects = useCallback(
+    (p: { x: number; y: number }) => {
+      const canvas = canvasRef.current
+      if (!canvas) return null
+      const rects = activePageRedactions
+      // Handle size in normalized units, converted from the fixed canvas-pixel
+      // handle drawn by composite (matches drawSelectionOverlay).
+      const w = canvas.width || 1
+      const h = canvas.height || 1
+      // Iterate in reverse so the most recently added rect (drawn on top) wins.
+      for (let i = rects.length - 1; i >= 0; i--) {
+        const r = rects[i]!
+        const rw = r.w * w
+        const rh = r.h * h
+        const handlePx = Math.max(10, Math.min(20, Math.min(rw, rh) / 4))
+        const handleNormX = handlePx / w
+        const handleNormY = handlePx / h
+        const withinX = p.x >= r.x && p.x <= r.x + r.w
+        const withinY = p.y >= r.y && p.y <= r.y + r.h
+        if (!withinX || !withinY) continue
+        const inHandle = p.x >= r.x + r.w - handleNormX && p.y >= r.y + r.h - handleNormY
+        return { rect: r, target: inHandle ? ('resize' as const) : ('move' as const) }
+      }
+      return null
+    },
+    [activePageRedactions],
+  )
+
   const onPointerDown = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       if (!loaded || compareMode !== 'protected') return
       const p = canvasToNormalized(e.clientX, e.clientY)
       if (!p) return
+
       if (cropMode) {
         e.preventDefault()
         ;(e.target as Element).setPointerCapture?.(e.pointerId)
         dragStartRef.current = p
+        dragModeRef.current = 'crop'
         setCropRect({ x: p.x, y: p.y, w: 0, h: 0 })
         return
       }
+
+      // Try to grab an existing rect first (works whether or not redact mode is on).
+      const hit = hitTestRects(p)
+      if (hit) {
+        e.preventDefault()
+        ;(e.target as Element).setPointerCapture?.(e.pointerId)
+        setSelectedRectId(hit.rect.id)
+        dragModeRef.current = hit.target
+        dragOffsetRef.current = { dx: p.x - hit.rect.x, dy: p.y - hit.rect.y }
+        return
+      }
+
+      // Empty area: clear selection.
+      if (selectedRectId) setSelectedRectId(null)
+
       if (!redactMode) return
       e.preventDefault()
       ;(e.target as Element).setPointerCapture?.(e.pointerId)
       dragStartRef.current = p
+      dragModeRef.current = 'draw'
       setActiveRect({ id: 'active', x: p.x, y: p.y, w: 0, h: 0, mode: redactStyle })
     },
-    [redactMode, cropMode, loaded, canvasToNormalized, compareMode, redactStyle],
+    [
+      redactMode,
+      cropMode,
+      loaded,
+      canvasToNormalized,
+      compareMode,
+      redactStyle,
+      hitTestRects,
+      selectedRectId,
+    ],
   )
 
   const onPointerMove = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
-      if (!dragStartRef.current) return
+      const mode = dragModeRef.current
+      if (!mode) return
       const p = canvasToNormalized(e.clientX, e.clientY)
       if (!p) return
-      const start = dragStartRef.current
-      const rect = {
-        x: Math.min(start.x, p.x),
-        y: Math.min(start.y, p.y),
-        w: Math.abs(p.x - start.x),
-        h: Math.abs(p.y - start.y),
-      }
-      if (cropMode) {
-        setCropRect(rect)
+
+      if (mode === 'crop') {
+        const start = dragStartRef.current
+        if (!start) return
+        setCropRect({
+          x: Math.min(start.x, p.x),
+          y: Math.min(start.y, p.y),
+          w: Math.abs(p.x - start.x),
+          h: Math.abs(p.y - start.y),
+        })
         return
       }
-      if (!redactMode) return
-      setActiveRect({
-        id: 'active',
-        ...rect,
-        mode: redactStyle,
-      })
+
+      if (mode === 'draw') {
+        const start = dragStartRef.current
+        if (!start) return
+        setActiveRect({
+          id: 'active',
+          x: Math.min(start.x, p.x),
+          y: Math.min(start.y, p.y),
+          w: Math.abs(p.x - start.x),
+          h: Math.abs(p.y - start.y),
+          mode: redactStyle,
+        })
+        return
+      }
+
+      if ((mode === 'move' || mode === 'resize') && selectedRectId) {
+        setRedactionsByPage((prev) => {
+          const arr = prev.get(activePageIndex)
+          if (!arr) return prev
+          const idx = arr.findIndex((r) => r.id === selectedRectId)
+          if (idx < 0) return prev
+          const r = arr[idx]!
+          let updated = r
+          if (mode === 'move') {
+            const offset = dragOffsetRef.current
+            const nx = Math.max(0, Math.min(1 - r.w, p.x - offset.dx))
+            const ny = Math.max(0, Math.min(1 - r.h, p.y - offset.dy))
+            updated = { ...r, x: nx, y: ny }
+          } else {
+            const nw = Math.max(MIN_RECT, Math.min(1 - r.x, p.x - r.x))
+            const nh = Math.max(MIN_RECT, Math.min(1 - r.y, p.y - r.y))
+            updated = { ...r, w: nw, h: nh }
+          }
+          const nextArr = arr.slice()
+          nextArr[idx] = updated
+          const next = new Map(prev)
+          next.set(activePageIndex, nextArr)
+          return next
+        })
+      }
     },
-    [redactMode, cropMode, canvasToNormalized, redactStyle],
+    [canvasToNormalized, redactStyle, selectedRectId, activePageIndex],
   )
 
   const onPointerUp = useCallback(
     (e: React.PointerEvent<HTMLCanvasElement>) => {
       ;(e.target as Element).releasePointerCapture?.(e.pointerId)
+      const mode = dragModeRef.current
+      dragModeRef.current = null
       dragStartRef.current = null
-      if (cropMode) {
-        // Keep the selection for review; user confirms via Apply.
-        return
-      }
-      if (!redactMode) return
+
+      if (mode === 'crop') return
+      if (mode === 'move' || mode === 'resize') return
+
+      if (mode !== 'draw') return
       const rect = activeRect
       setActiveRect(null)
       if (!rect) return
@@ -794,8 +897,9 @@ export function App(): JSX.Element {
         next.set(activePageIndex, [...arr, finalRect])
         return next
       })
+      setSelectedRectId(finalRect.id)
     },
-    [redactMode, cropMode, activeRect, activePageIndex, redactStyle, redactSolidColor],
+    [activeRect, activePageIndex, redactStyle, redactSolidColor],
   )
 
   const undoRedaction = useCallback(() => {
@@ -813,7 +917,44 @@ export function App(): JSX.Element {
   const clearRedactions = useCallback(() => {
     setRedactionsByPage(new Map())
     setActiveRect(null)
+    setSelectedRectId(null)
   }, [])
+
+  const deleteSelectedRect = useCallback(() => {
+    if (!selectedRectId) return
+    setRedactionsByPage((prev) => {
+      const arr = prev.get(activePageIndex)
+      if (!arr) return prev
+      const kept = arr.filter((r) => r.id !== selectedRectId)
+      const next = new Map(prev)
+      if (kept.length) next.set(activePageIndex, kept)
+      else next.delete(activePageIndex)
+      return next
+    })
+    setSelectedRectId(null)
+  }, [selectedRectId, activePageIndex])
+
+  // Global keyboard shortcuts for the selected rect: Delete/Backspace removes,
+  // Escape deselects. Skipped while the user is typing in an input.
+  useEffect(() => {
+    if (!selectedRectId) return
+    const isEditable = (el: EventTarget | null): boolean => {
+      if (!(el instanceof HTMLElement)) return false
+      const tag = el.tagName
+      return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable
+    }
+    const onKey = (e: KeyboardEvent) => {
+      if (isEditable(e.target)) return
+      if (e.key === 'Delete' || e.key === 'Backspace') {
+        e.preventDefault()
+        deleteSelectedRect()
+      } else if (e.key === 'Escape') {
+        setSelectedRectId(null)
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [selectedRectId, deleteSelectedRect])
 
   // ---------- Template rect wiring ----------
 
@@ -1267,6 +1408,8 @@ export function App(): JSX.Element {
             activePageRedactionsCount={activePageRedactions.length}
             onUndoRedaction={undoRedaction}
             onClearRedactions={clearRedactions}
+            selectedRectId={selectedRectId}
+            onDeleteSelectedRect={deleteSelectedRect}
             onPointerDown={onPointerDown}
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
@@ -1685,6 +1828,8 @@ interface WorkspaceProps {
   activePageRedactionsCount: number
   onUndoRedaction: () => void
   onClearRedactions: () => void
+  selectedRectId: string | null
+  onDeleteSelectedRect: () => void
   onPointerDown: (e: React.PointerEvent<HTMLCanvasElement>) => void
   onPointerMove: (e: React.PointerEvent<HTMLCanvasElement>) => void
   onPointerUp: (e: React.PointerEvent<HTMLCanvasElement>) => void
@@ -1783,6 +1928,8 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     activePageRedactionsCount,
     onUndoRedaction,
     onClearRedactions,
+    selectedRectId,
+    onDeleteSelectedRect,
     onPointerDown,
     onPointerMove,
     onPointerUp,
@@ -2215,6 +2362,22 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           <p className="text-xs text-muted-foreground">
             {redactMode ? strings.workspace.redactHint : ''}
           </p>
+          {redactionsCount > 0 && (
+            <p className="text-[11px] text-muted-foreground/80">
+              {strings.workspace.selectionHint}
+            </p>
+          )}
+          {selectedRectId && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onDeleteSelectedRect}
+              className="w-full"
+            >
+              <X className="h-4 w-4" />
+              {strings.workspace.deleteSelected}
+            </Button>
+          )}
           {isMultiPage && (
             <p className="text-[11px] text-muted-foreground/80 font-mono">
               {strings.workspace.redactPdfLimitation}
