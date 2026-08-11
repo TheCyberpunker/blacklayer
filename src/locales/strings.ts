@@ -136,6 +136,36 @@ export interface Strings {
     batchCount: (n: number) => string
     downloadNameLabel: string
     downloadNameHint: string
+    templateTitle: (docLabel: string) => string
+    templateHint: string
+    templateSideAnverso: string
+    templateSideReverso: string
+    templateProfilesLabel: string
+    templateFieldsLabel: string
+    templateClear: string
+    templateInexact: string
+    styleTitle: string
+    styleOpacity: string
+    styleRotation: string
+    styleFontSize: string
+    styleReset: string
+    styleColor: string
+    redactSolidColor: string
+    searchTitle: string
+    searchPlaceholder: string
+    searchRun: string
+    searchWorking: string
+    searchNoResults: string
+    searchResults: (matches: number, pages: number) => string
+    searchClear: string
+    searchLimitationsPdfOnly: string
+    searchNotPdf: string
+    searchTooShort: string
+    adjustLabel: string
+    adjustRotateLeft: string
+    adjustRotateRight: string
+    adjustGrayscale: string
+    adjustConfirmClearRedactions: string
   }
   result: {
     ready: string
@@ -337,6 +367,37 @@ export const enStrings: Strings = {
     batchCount: (n) => `${n} file${n === 1 ? '' : 's'} ready`,
     downloadNameLabel: 'File name',
     downloadNameHint: 'You can rename the file before downloading it.',
+    templateTitle: (docLabel) => `${docLabel} quick template`,
+    templateHint: 'Tick the fields to censor. Rectangles are added on the page you are viewing.',
+    templateSideAnverso: 'Front',
+    templateSideReverso: 'Back',
+    templateProfilesLabel: 'Profiles',
+    templateFieldsLabel: 'Fields',
+    templateClear: 'Clear template',
+    templateInexact: 'Coordinates are approximate. Adjust with manual redaction if your photo is off-angle.',
+    styleTitle: 'Watermark style',
+    styleOpacity: 'Opacity',
+    styleRotation: 'Rotation',
+    styleFontSize: 'Text size',
+    styleReset: 'Reset',
+    styleColor: 'Color',
+    redactSolidColor: 'Fill color',
+    searchTitle: 'Find text and hide',
+    searchPlaceholder: 'e.g. mail@example.com',
+    searchRun: 'Find and hide',
+    searchWorking: 'Searching…',
+    searchNoResults: 'No matches',
+    searchResults: (matches, pages) =>
+      `${matches} match${matches === 1 ? '' : 'es'} on ${pages} page${pages === 1 ? '' : 's'}`,
+    searchClear: 'Clear search hides',
+    searchLimitationsPdfOnly: 'Text search works on PDFs with embedded text. Scanned image PDFs need OCR (on the roadmap).',
+    searchNotPdf: 'Text search is only available for PDF files.',
+    searchTooShort: 'Type at least 2 characters.',
+    adjustLabel: 'Adjust image',
+    adjustRotateLeft: 'Rotate left',
+    adjustRotateRight: 'Rotate right',
+    adjustGrayscale: 'Black & white',
+    adjustConfirmClearRedactions: 'Rotating the image will clear the redactions you drew. Continue?',
   },
   result: {
     ready: 'Your protected copy is ready',
@@ -538,6 +599,37 @@ export const esStrings: Strings = {
     batchCount: (n) => `${n} archivo${n === 1 ? '' : 's'} listo${n === 1 ? '' : 's'}`,
     downloadNameLabel: 'Nombre del archivo',
     downloadNameHint: 'Puedes cambiar el nombre antes de descargar.',
+    templateTitle: (docLabel) => `Plantilla rápida · ${docLabel}`,
+    templateHint: 'Marca los campos a censurar. Los rectángulos se aplican a la página que estás viendo.',
+    templateSideAnverso: 'Anverso',
+    templateSideReverso: 'Reverso',
+    templateProfilesLabel: 'Perfiles',
+    templateFieldsLabel: 'Campos',
+    templateClear: 'Vaciar plantilla',
+    templateInexact: 'Las coordenadas son aproximadas. Ajusta con ocultación manual si tu foto está inclinada.',
+    styleTitle: 'Estilo de la marca',
+    styleOpacity: 'Opacidad',
+    styleRotation: 'Rotación',
+    styleFontSize: 'Tamaño de texto',
+    styleReset: 'Restablecer',
+    styleColor: 'Color',
+    redactSolidColor: 'Color de relleno',
+    searchTitle: 'Buscar texto y ocultarlo',
+    searchPlaceholder: 'p. ej. correo@ejemplo.com',
+    searchRun: 'Buscar y ocultar',
+    searchWorking: 'Buscando…',
+    searchNoResults: 'Sin coincidencias',
+    searchResults: (matches, pages) =>
+      `${matches} coincidencia${matches === 1 ? '' : 's'} en ${pages} página${pages === 1 ? '' : 's'}`,
+    searchClear: 'Vaciar búsquedas ocultas',
+    searchLimitationsPdfOnly: 'La búsqueda funciona con PDFs con texto incrustado. Los PDFs escaneados necesitan OCR (en la hoja de ruta).',
+    searchNotPdf: 'La búsqueda solo está disponible para PDFs.',
+    searchTooShort: 'Escribe al menos 2 caracteres.',
+    adjustLabel: 'Ajustar imagen',
+    adjustRotateLeft: 'Girar a la izquierda',
+    adjustRotateRight: 'Girar a la derecha',
+    adjustGrayscale: 'Blanco y negro',
+    adjustConfirmClearRedactions: 'Girar la imagen eliminará las zonas que hayas ocultado. ¿Continuar?',
   },
   result: {
     ready: 'Tu copia protegida está lista',

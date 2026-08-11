@@ -31,7 +31,10 @@ import { composite, drawOriginal } from './core/preview/composite.ts'
 import type { DetectionResult, DocumentType } from './core/detect/types.ts'
 import { UNKNOWN_DETECTION } from './core/detect/types.ts'
 import { purposesFor, recommendedLevel } from './core/detect/templates.ts'
+import { templateFor, type CardSide, type DocumentTemplate, type FieldRect, type TemplateProfile } from './core/templates/index.ts'
 import { generateSeed } from './core/random/seed.ts'
+import { hexToRgb01, rgb01ToHex } from './lib/color.ts'
+import { Contrast, RotateCcw, RotateCw, Search } from 'lucide-react'
 import { Button } from './components/ui/button.tsx'
 import { Input } from './components/ui/input.tsx'
 import { Label } from './components/ui/label.tsx'
@@ -159,9 +162,19 @@ export function App(): JSX.Element {
   const [advancedOpen, setAdvancedOpen] = useState(false)
   const [crosshatchOverride, setCrosshatchOverride] = useState<boolean | null>(null)
   const [frameOverride, setFrameOverride] = useState<boolean | null>(null)
+  const [opacityOverride, setOpacityOverride] = useState<number | null>(null)
+  const [rotationOverride, setRotationOverride] = useState<number | null>(null)
+  const [fontSizeOverride, setFontSizeOverride] = useState<number | null>(null)
+  const [colorOverride, setColorOverride] = useState<string | null>(null)
+  const [redactSolidColor, setRedactSolidColor] = useState<string>('#000000')
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searching, setSearching] = useState(false)
+  const [searchSummary, setSearchSummary] = useState<{ matches: number; pages: number } | null>(null)
+  const [adjusting, setAdjusting] = useState(false)
   const [redactionsByPage, setRedactionsByPage] = useState<Map<number, RedactionRect[]>>(new Map())
   const [redactMode, setRedactMode] = useState(false)
   const [redactStyle, setRedactStyle] = useState<RedactionMode>('solid')
+  const [templateSide, setTemplateSide] = useState<CardSide>('anverso')
   const [activeRect, setActiveRect] = useState<RedactionRect | null>(null)
   const [compareMode, setCompareMode] = useState<CompareMode>('protected')
   const [dividerX, setDividerX] = useState(0.5)
@@ -192,9 +205,13 @@ export function App(): JSX.Element {
         {
           crosshatch: crosshatchOverride ?? undefined,
           frame: frameOverride ?? undefined,
+          opacity: opacityOverride ?? undefined,
+          rotationDeg: rotationOverride ?? undefined,
+          fontSize: fontSizeOverride ?? undefined,
+          color: colorOverride ? hexToRgb01(colorOverride) : undefined,
         },
       ),
-    [level, debouncedRecipient, debouncedPurpose, lang, effectiveCustom, docSeed, crosshatchOverride, frameOverride],
+    [level, debouncedRecipient, debouncedPurpose, lang, effectiveCustom, docSeed, crosshatchOverride, frameOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride],
   )
 
   const activePageRedactions = redactionsByPage.get(activePageIndex) ?? []
@@ -323,6 +340,7 @@ export function App(): JSX.Element {
         setRedactionsByPage(new Map())
         setRedactMode(false)
         setRedactStyle('solid')
+        setTemplateSide('anverso')
         setCompareMode('protected')
         setDividerX(0.5)
         setCustomEnabled(false)
@@ -333,6 +351,11 @@ export function App(): JSX.Element {
         setAdvancedOpen(false)
         setCrosshatchOverride(null)
         setFrameOverride(null)
+        setOpacityOverride(null)
+        setRotationOverride(null)
+        setFontSizeOverride(null)
+        setColorOverride(null)
+        setRedactSolidColor('#000000')
 
         // Run detection async; do not block the UI.
         void (async () => {
@@ -395,6 +418,11 @@ export function App(): JSX.Element {
     setAdvancedOpen(false)
     setCrosshatchOverride(null)
     setFrameOverride(null)
+    setOpacityOverride(null)
+    setRotationOverride(null)
+    setFontSizeOverride(null)
+    setColorOverride(null)
+    setRedactSolidColor('#000000')
     clearOutput()
     setError(null)
   }, [loaded, clearOutput])
@@ -475,6 +503,10 @@ export function App(): JSX.Element {
         {
           crosshatch: crosshatchOverride ?? undefined,
           frame: frameOverride ?? undefined,
+          opacity: opacityOverride ?? undefined,
+          rotationDeg: rotationOverride ?? undefined,
+          fontSize: fontSizeOverride ?? undefined,
+          color: colorOverride ? hexToRgb01(colorOverride) : undefined,
         },
       )
       let blob: Blob
@@ -519,7 +551,7 @@ export function App(): JSX.Element {
     } finally {
       setWorking(false)
     }
-  }, [loaded, level, recipient, purpose, lang, customEnabled, customText, redactionsByPage, docSeed, crosshatchOverride, frameOverride, t, clearOutput])
+  }, [loaded, level, recipient, purpose, lang, customEnabled, customText, redactionsByPage, docSeed, crosshatchOverride, frameOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride, t, clearOutput])
 
   const protectBatch = useCallback(async () => {
     if (!batch.length) return
@@ -696,7 +728,12 @@ export function App(): JSX.Element {
       setActiveRect(null)
       if (!rect) return
       if (rect.w < MIN_RECT || rect.h < MIN_RECT) return
-      const finalRect: RedactionRect = { ...rect, id: nextId(), mode: redactStyle }
+      const finalRect: RedactionRect = {
+        ...rect,
+        id: nextId(),
+        mode: redactStyle,
+        color: redactStyle === 'solid' ? hexToRgb01(redactSolidColor) : undefined,
+      }
       setRedactionsByPage((prev) => {
         const next = new Map(prev)
         const arr = next.get(activePageIndex) ?? []
@@ -704,7 +741,7 @@ export function App(): JSX.Element {
         return next
       })
     },
-    [redactMode, activeRect, activePageIndex, redactStyle],
+    [redactMode, activeRect, activePageIndex, redactStyle, redactSolidColor],
   )
 
   const undoRedaction = useCallback(() => {
@@ -723,6 +760,194 @@ export function App(): JSX.Element {
     setRedactionsByPage(new Map())
     setActiveRect(null)
   }, [])
+
+  // ---------- Template rect wiring ----------
+
+  const templateRectId = (fieldId: string, pageIndex: number): string =>
+    `template:${fieldId}:${pageIndex}`
+
+  const activeTemplate = useMemo<DocumentTemplate | null>(() => templateFor(detection), [detection])
+
+  const toggleTemplateField = useCallback(
+    (field: FieldRect) => {
+      const rectId = templateRectId(field.id, activePageIndex)
+      setRedactionsByPage((prev) => {
+        const next = new Map(prev)
+        const arr = next.get(activePageIndex) ?? []
+        const existingIdx = arr.findIndex((r) => r.id === rectId)
+        if (existingIdx >= 0) {
+          const filtered = arr.filter((_, i) => i !== existingIdx)
+          if (filtered.length) next.set(activePageIndex, filtered)
+          else next.delete(activePageIndex)
+        } else {
+          next.set(activePageIndex, [
+            ...arr,
+            {
+              id: rectId,
+              x: field.x,
+              y: field.y,
+              w: field.w,
+              h: field.h,
+              mode: redactStyle,
+            },
+          ])
+        }
+        return next
+      })
+    },
+    [activePageIndex, redactStyle],
+  )
+
+  const activeFieldIds = useMemo(() => {
+    const rects = redactionsByPage.get(activePageIndex) ?? []
+    const active = new Set<string>()
+    for (const r of rects) {
+      if (r.id.startsWith('template:')) {
+        // template:<fieldId>:<pageIndex>
+        const fieldId = r.id.split(':')[1]
+        if (fieldId) active.add(fieldId)
+      }
+    }
+    return active
+  }, [redactionsByPage, activePageIndex])
+
+  const applyProfile = useCallback(
+    (profile: TemplateProfile, template: DocumentTemplate) => {
+      if (!template) return
+      // Clear any template rects on the active page first, then add the profile's fields
+      // scoped to the current side. Manual rects (non-template) are untouched.
+      const relevantFields = template.fields.filter(
+        (f) => profile.fieldIds.includes(f.id) && f.side === templateSide,
+      )
+      setRedactionsByPage((prev) => {
+        const next = new Map(prev)
+        const arr = next.get(activePageIndex) ?? []
+        const withoutTemplate = arr.filter((r) => !r.id.startsWith('template:'))
+        const additions = relevantFields.map((f) => ({
+          id: templateRectId(f.id, activePageIndex),
+          x: f.x,
+          y: f.y,
+          w: f.w,
+          h: f.h,
+          mode: redactStyle,
+        }))
+        const merged = [...withoutTemplate, ...additions]
+        if (merged.length) next.set(activePageIndex, merged)
+        else next.delete(activePageIndex)
+        return next
+      })
+    },
+    [activePageIndex, templateSide, redactStyle],
+  )
+
+  const clearTemplate = useCallback(() => {
+    setRedactionsByPage((prev) => {
+      const next = new Map(prev)
+      const arr = next.get(activePageIndex) ?? []
+      const kept = arr.filter((r) => !r.id.startsWith('template:'))
+      if (kept.length) next.set(activePageIndex, kept)
+      else next.delete(activePageIndex)
+      return next
+    })
+  }, [activePageIndex])
+
+  // ---------- Text search redaction ----------
+
+  const runTextSearch = useCallback(async () => {
+    if (!loaded || loaded.kind !== 'pdf') return
+    const q = searchQuery.trim()
+    if (q.length < 2) return
+    setSearching(true)
+    setSearchSummary(null)
+    try {
+      const { findTextMatches } = await import('./core/pdf/text-search.ts')
+      const buf = await loaded.file.arrayBuffer()
+      const matches = await findTextMatches({ sourceBytes: buf, query: q })
+
+      // Clear any previous search rects across all pages first.
+      setRedactionsByPage((prev) => {
+        const next = new Map<number, RedactionRect[]>()
+        for (const [idx, arr] of prev) {
+          const kept = arr.filter((r) => !r.id.startsWith('search:'))
+          if (kept.length) next.set(idx, kept)
+        }
+        // Apply the new search rects grouped by page.
+        const grouped = new Map<number, RedactionRect[]>()
+        matches.forEach((m, i) => {
+          const rect: RedactionRect = {
+            id: `search:${i}:${m.pageIndex}`,
+            x: Math.max(0, m.x),
+            y: Math.max(0, m.y),
+            w: Math.max(0.001, m.w),
+            h: Math.max(0.001, m.h),
+            mode: redactStyle,
+            color: redactStyle === 'solid' ? hexToRgb01(redactSolidColor) : undefined,
+          }
+          const list = grouped.get(m.pageIndex) ?? []
+          list.push(rect)
+          grouped.set(m.pageIndex, list)
+        })
+        for (const [idx, list] of grouped) {
+          const existing = next.get(idx) ?? []
+          next.set(idx, [...existing, ...list])
+        }
+        return next
+      })
+
+      const pagesTouched = new Set(matches.map((m) => m.pageIndex)).size
+      setSearchSummary({ matches: matches.length, pages: pagesTouched })
+    } catch {
+      setSearchSummary({ matches: 0, pages: 0 })
+    } finally {
+      setSearching(false)
+    }
+  }, [loaded, searchQuery, redactStyle, redactSolidColor])
+
+  const clearSearchRedactions = useCallback(() => {
+    setRedactionsByPage((prev) => {
+      const next = new Map<number, RedactionRect[]>()
+      for (const [idx, arr] of prev) {
+        const kept = arr.filter((r) => !r.id.startsWith('search:'))
+        if (kept.length) next.set(idx, kept)
+      }
+      return next
+    })
+    setSearchSummary(null)
+    setSearchQuery('')
+  }, [])
+
+  // ---------- Image adjust ----------
+
+  const anyRedactions = useMemo(() => {
+    for (const arr of redactionsByPage.values()) if (arr.length) return true
+    return false
+  }, [redactionsByPage])
+
+  const applyAdjust = useCallback(
+    async (kind: 'rotate-left' | 'rotate-right' | 'grayscale') => {
+      if (!loaded || loaded.kind !== 'image') return
+      if (kind !== 'grayscale' && anyRedactions) {
+        if (!window.confirm(t.workspace.adjustConfirmClearRedactions)) return
+      }
+      setAdjusting(true)
+      try {
+        const mod = await import('./core/image/adjust.ts')
+        let result
+        if (kind === 'grayscale') result = await mod.grayscaleImageFile(loaded.file)
+        else if (kind === 'rotate-left') result = await mod.rotateImageFile(loaded.file, -90)
+        else result = await mod.rotateImageFile(loaded.file, 90)
+        const nextFile = mod.fileFromBlob(result.blob, result.filename, '')
+        // Feed it back through the normal drop path; onFiles handles renderBase,
+        // detection, and resets state consistently.
+        const dt = new DataTransfer()
+        dt.items.add(nextFile)
+        await onFiles(dt.files)
+      } finally {
+        setAdjusting(false)
+      }
+    },
+    [loaded, anyRedactions, onFiles, t],
+  )
 
   // ---------- Slider divider handlers ----------
 
@@ -861,6 +1086,31 @@ export function App(): JSX.Element {
             frameOn={previewProfile.watermark.patterns.frame}
             onCrosshatchChange={(v) => setCrosshatchOverride(v)}
             onFrameChange={(v) => setFrameOverride(v)}
+            opacity={previewProfile.watermark.opacity}
+            rotationDeg={previewProfile.watermark.rotationDeg}
+            fontSize={previewProfile.watermark.fontSize}
+            colorHex={rgb01ToHex(previewProfile.watermark.color)}
+            onOpacityChange={setOpacityOverride}
+            onRotationChange={setRotationOverride}
+            onFontSizeChange={setFontSizeOverride}
+            onColorChange={setColorOverride}
+            onResetStyle={() => {
+              setOpacityOverride(null)
+              setRotationOverride(null)
+              setFontSizeOverride(null)
+              setColorOverride(null)
+            }}
+            redactSolidColor={redactSolidColor}
+            onRedactSolidColorChange={setRedactSolidColor}
+            isPdf={loaded.kind === 'pdf'}
+            searchQuery={searchQuery}
+            onSearchQueryChange={setSearchQuery}
+            searching={searching}
+            searchSummary={searchSummary}
+            onRunSearch={runTextSearch}
+            onClearSearch={clearSearchRedactions}
+            adjusting={adjusting}
+            onAdjust={applyAdjust}
             presets={presets}
             onApplyPreset={applyPreset}
             onSavePreset={onSaveCurrentPreset}
@@ -911,6 +1161,13 @@ export function App(): JSX.Element {
             onPointerMove={onPointerMove}
             onPointerUp={onPointerUp}
             redactionsByPageMap={redactionsByPage}
+            template={activeTemplate}
+            templateSide={templateSide}
+            onTemplateSideChange={setTemplateSide}
+            activeTemplateFieldIds={activeFieldIds}
+            onToggleTemplateField={toggleTemplateField}
+            onApplyProfile={applyProfile}
+            onClearTemplate={clearTemplate}
           />
         )}
       </main>
@@ -1265,6 +1522,26 @@ interface WorkspaceProps {
   frameOn: boolean
   onCrosshatchChange: (v: boolean) => void
   onFrameChange: (v: boolean) => void
+  opacity: number
+  rotationDeg: number
+  fontSize: number
+  colorHex: string
+  onOpacityChange: (v: number) => void
+  onRotationChange: (v: number) => void
+  onFontSizeChange: (v: number) => void
+  onColorChange: (v: string) => void
+  onResetStyle: () => void
+  redactSolidColor: string
+  onRedactSolidColorChange: (v: string) => void
+  isPdf: boolean
+  searchQuery: string
+  onSearchQueryChange: (v: string) => void
+  searching: boolean
+  searchSummary: { matches: number; pages: number } | null
+  onRunSearch: () => void
+  onClearSearch: () => void
+  adjusting: boolean
+  onAdjust: (kind: 'rotate-left' | 'rotate-right' | 'grayscale') => void
   presets: Preset[]
   onApplyPreset: (p: Preset) => void
   onSavePreset: () => void
@@ -1296,6 +1573,13 @@ interface WorkspaceProps {
   onPointerMove: (e: React.PointerEvent<HTMLCanvasElement>) => void
   onPointerUp: (e: React.PointerEvent<HTMLCanvasElement>) => void
   redactionsByPageMap: ReadonlyMap<number, RedactionRect[]>
+  template: DocumentTemplate | null
+  templateSide: CardSide
+  onTemplateSideChange: (s: CardSide) => void
+  activeTemplateFieldIds: ReadonlySet<string>
+  onToggleTemplateField: (field: FieldRect) => void
+  onApplyProfile: (profile: TemplateProfile, template: DocumentTemplate) => void
+  onClearTemplate: () => void
 }
 
 function Workspace(props: WorkspaceProps): JSX.Element {
@@ -1330,6 +1614,26 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     frameOn,
     onCrosshatchChange,
     onFrameChange,
+    opacity,
+    rotationDeg,
+    fontSize,
+    colorHex,
+    onOpacityChange,
+    onRotationChange,
+    onFontSizeChange,
+    onColorChange,
+    onResetStyle,
+    redactSolidColor,
+    onRedactSolidColorChange,
+    isPdf,
+    searchQuery,
+    onSearchQueryChange,
+    searching,
+    searchSummary,
+    onRunSearch,
+    onClearSearch,
+    adjusting,
+    onAdjust,
     presets,
     onApplyPreset,
     onSavePreset,
@@ -1361,6 +1665,13 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     onPointerMove,
     onPointerUp,
     redactionsByPageMap,
+    template,
+    templateSide,
+    onTemplateSideChange,
+    activeTemplateFieldIds,
+    onToggleTemplateField,
+    onApplyProfile,
+    onClearTemplate,
   } = props
 
   const sizeKb = (loaded.file.size / 1024).toFixed(1)
@@ -1585,6 +1896,20 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           )}
         </section>
 
+        {template && (
+          <TemplatePanel
+            template={template}
+            side={templateSide}
+            onSideChange={onTemplateSideChange}
+            activeFieldIds={activeTemplateFieldIds}
+            onToggleField={onToggleTemplateField}
+            onApplyProfile={onApplyProfile}
+            onClear={onClearTemplate}
+            lang={strings.header.langLabel === 'Idioma' ? 'es' : 'en'}
+            strings={strings}
+          />
+        )}
+
         {/* Redaction */}
         <section className="space-y-2 pt-4 border-t border-border/60" aria-label={strings.workspace.stepRedact}>
           <div className="flex items-center justify-between">
@@ -1600,6 +1925,23 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             onChange={onRedactStyleChange}
             strings={strings}
           />
+          {redactStyle === 'solid' && (
+            <label className="flex items-center justify-between pt-1">
+              <span className="text-xs text-foreground">{strings.workspace.redactSolidColor}</span>
+              <span className="inline-flex items-center gap-2">
+                <input
+                  type="color"
+                  value={redactSolidColor}
+                  onChange={(e) => onRedactSolidColorChange(e.target.value)}
+                  aria-label={strings.workspace.redactSolidColor}
+                  className="h-6 w-9 rounded border border-input bg-background cursor-pointer"
+                />
+                <span className="font-mono text-[11px] text-muted-foreground uppercase">
+                  {redactSolidColor}
+                </span>
+              </span>
+            </label>
+          )}
           {redactStyle !== 'solid' && (
             <p className="text-[11px] text-muted-foreground/80">
               {strings.workspace.redactModeHint}
@@ -1655,6 +1997,18 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               {strings.workspace.redactPdfLimitation}
             </p>
           )}
+
+          {isPdf && (
+            <TextSearchPanel
+              query={searchQuery}
+              onQueryChange={onSearchQueryChange}
+              searching={searching}
+              summary={searchSummary}
+              onRun={onRunSearch}
+              onClear={onClearSearch}
+              strings={strings}
+            />
+          )}
         </section>
 
         {/* Advanced */}
@@ -1674,7 +2028,19 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             />
           </button>
           {advancedOpen && (
-            <div className="space-y-3">
+            <div className="space-y-4">
+              <StyleSliders
+                opacity={opacity}
+                rotationDeg={rotationDeg}
+                fontSize={fontSize}
+                colorHex={colorHex}
+                onOpacity={onOpacityChange}
+                onRotation={onRotationChange}
+                onFontSize={onFontSizeChange}
+                onColor={onColorChange}
+                onReset={onResetStyle}
+                strings={strings}
+              />
               <PatternToggle
                 label={strings.workspace.patternCrosshatchLabel}
                 hint={strings.workspace.patternCrosshatchHint}
@@ -2249,6 +2615,136 @@ function BatchRow({
   )
 }
 
+function TemplatePanel({
+  template,
+  side,
+  onSideChange,
+  activeFieldIds,
+  onToggleField,
+  onApplyProfile,
+  onClear,
+  lang,
+  strings,
+}: {
+  template: DocumentTemplate
+  side: CardSide
+  onSideChange: (s: CardSide) => void
+  activeFieldIds: ReadonlySet<string>
+  onToggleField: (field: FieldRect) => void
+  onApplyProfile: (profile: TemplateProfile, template: DocumentTemplate) => void
+  onClear: () => void
+  lang: 'en' | 'es'
+  strings: Strings
+}): JSX.Element {
+  const label = lang === 'es' ? template.labelEs : template.labelEn
+  const fields = template.fields.filter((f) => f.side === side)
+  const anyActive = fields.some((f) => activeFieldIds.has(f.id))
+
+  return (
+    <section className="space-y-3 pt-4 border-t border-border/60" aria-label={strings.workspace.templateTitle(label)}>
+      <div className="flex items-center justify-between gap-2">
+        <div className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+          <Sparkles className="h-3.5 w-3.5 text-foreground/70" />
+          <span>{strings.workspace.templateTitle(label)}</span>
+        </div>
+        {anyActive && (
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+          >
+            {strings.workspace.templateClear}
+          </button>
+        )}
+      </div>
+
+      <p className="text-xs text-muted-foreground leading-relaxed">{strings.workspace.templateHint}</p>
+
+      {/* Side selector */}
+      <div
+        role="radiogroup"
+        aria-label="Card side"
+        className="grid grid-cols-2 gap-1 p-1 rounded-md bg-muted"
+      >
+        {(['anverso', 'reverso'] as CardSide[]).map((s) => {
+          const selected = s === side
+          const l = s === 'anverso' ? strings.workspace.templateSideAnverso : strings.workspace.templateSideReverso
+          return (
+            <button
+              key={s}
+              type="button"
+              role="radio"
+              aria-checked={selected}
+              onClick={() => onSideChange(s)}
+              className={cn(
+                'h-8 text-xs font-medium rounded transition-colors',
+                selected ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+              )}
+            >
+              {l}
+            </button>
+          )
+        })}
+      </div>
+
+      {/* Profile chips */}
+      <div className="space-y-1.5">
+        <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+          {strings.workspace.templateProfilesLabel}
+        </span>
+        <div className="flex flex-wrap gap-1.5">
+          {template.profiles.map((p) => (
+            <button
+              key={p.id}
+              type="button"
+              onClick={() => onApplyProfile(p, template)}
+              title={lang === 'es' ? p.descriptionEs : p.descriptionEn}
+              className="inline-flex items-center gap-1.5 text-[11px] px-2.5 py-1 rounded-full border border-border hover:border-foreground/50 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+            >
+              <span aria-hidden="true">{p.emoji}</span>
+              {lang === 'es' ? p.labelEs : p.labelEn}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Field checkboxes */}
+      <div className="space-y-1.5">
+        <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+          {strings.workspace.templateFieldsLabel}
+        </span>
+        <div className="grid grid-cols-2 gap-1.5">
+          {fields.map((f) => {
+            const checked = activeFieldIds.has(f.id)
+            const l = lang === 'es' ? f.labelEs : f.labelEn
+            return (
+              <label
+                key={f.id}
+                className={cn(
+                  'flex items-center gap-2 px-2 py-1.5 rounded-md border transition-colors cursor-pointer text-xs',
+                  checked
+                    ? 'border-foreground bg-foreground/5 text-foreground'
+                    : 'border-border hover:border-foreground/40 text-muted-foreground',
+                )}
+              >
+                <input
+                  type="checkbox"
+                  checked={checked}
+                  onChange={() => onToggleField(f)}
+                  className="h-3.5 w-3.5 rounded border-input accent-foreground"
+                />
+                <span className="truncate">{l}</span>
+              </label>
+            )
+          })}
+        </div>
+      </div>
+
+      <p className="text-[11px] text-muted-foreground/80 italic">{strings.workspace.templateInexact}</p>
+    </section>
+  )
+}
+
 function StepHeading({
   step,
   title,
@@ -2529,6 +3025,196 @@ function AppliedItem({ children }: { children: React.ReactNode }): JSX.Element {
       <span className="mt-1 h-1 w-1 rounded-full bg-foreground/60 shrink-0" />
       <span>{children}</span>
     </li>
+  )
+}
+
+function TextSearchPanel({
+  query,
+  onQueryChange,
+  searching,
+  summary,
+  onRun,
+  onClear,
+  strings,
+}: {
+  query: string
+  onQueryChange: (v: string) => void
+  searching: boolean
+  summary: { matches: number; pages: number } | null
+  onRun: () => void
+  onClear: () => void
+  strings: Strings
+}): JSX.Element {
+  const tooShort = query.trim().length > 0 && query.trim().length < 2
+  return (
+    <div className="pt-3 mt-2 border-t border-border/60 space-y-2">
+      <div className="flex items-center gap-2 text-xs">
+        <Search className="h-3.5 w-3.5 text-muted-foreground" />
+        <span className="font-medium text-foreground">{strings.workspace.searchTitle}</span>
+      </div>
+      <div className="flex gap-2">
+        <Input
+          type="search"
+          value={query}
+          onChange={(e) => onQueryChange(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !searching && !tooShort && query.trim()) {
+              e.preventDefault()
+              onRun()
+            }
+          }}
+          placeholder={strings.workspace.searchPlaceholder}
+          autoComplete="off"
+          maxLength={120}
+          className="flex-1 h-9 text-xs"
+        />
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={onRun}
+          disabled={searching || tooShort || !query.trim()}
+        >
+          {searching ? strings.workspace.searchWorking : strings.workspace.searchRun}
+        </Button>
+      </div>
+      {tooShort && (
+        <p className="text-[11px] text-muted-foreground/80">{strings.workspace.searchTooShort}</p>
+      )}
+      {summary && (
+        <div className="flex items-center justify-between text-[11px]">
+          <span className="text-muted-foreground font-mono">
+            {summary.matches > 0
+              ? strings.workspace.searchResults(summary.matches, summary.pages)
+              : strings.workspace.searchNoResults}
+          </span>
+          {summary.matches > 0 && (
+            <button
+              type="button"
+              onClick={onClear}
+              className="text-muted-foreground hover:text-destructive transition-colors"
+            >
+              {strings.workspace.searchClear}
+            </button>
+          )}
+        </div>
+      )}
+      <p className="text-[11px] text-muted-foreground/80">{strings.workspace.searchLimitationsPdfOnly}</p>
+    </div>
+  )
+}
+
+function StyleSliders({
+  opacity,
+  rotationDeg,
+  fontSize,
+  colorHex,
+  onOpacity,
+  onRotation,
+  onFontSize,
+  onColor,
+  onReset,
+  strings,
+}: {
+  opacity: number
+  rotationDeg: number
+  fontSize: number
+  colorHex: string
+  onOpacity: (v: number) => void
+  onRotation: (v: number) => void
+  onFontSize: (v: number) => void
+  onColor: (v: string) => void
+  onReset: () => void
+  strings: Strings
+}): JSX.Element {
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between">
+        <Label>{strings.workspace.styleTitle}</Label>
+        <button
+          type="button"
+          onClick={onReset}
+          className="text-[11px] text-muted-foreground hover:text-foreground transition-colors"
+        >
+          {strings.workspace.styleReset}
+        </button>
+      </div>
+      <SliderRow
+        label={strings.workspace.styleOpacity}
+        value={opacity}
+        min={0.05}
+        max={1}
+        step={0.01}
+        formatValue={(v) => `${Math.round(v * 100)}%`}
+        onChange={onOpacity}
+      />
+      <SliderRow
+        label={strings.workspace.styleRotation}
+        value={rotationDeg}
+        min={-90}
+        max={90}
+        step={1}
+        formatValue={(v) => `${Math.round(v)}°`}
+        onChange={onRotation}
+      />
+      <SliderRow
+        label={strings.workspace.styleFontSize}
+        value={fontSize}
+        min={8}
+        max={48}
+        step={1}
+        formatValue={(v) => `${Math.round(v)}pt`}
+        onChange={onFontSize}
+      />
+      <label className="flex items-center justify-between">
+        <span className="text-xs text-foreground">{strings.workspace.styleColor}</span>
+        <span className="inline-flex items-center gap-2">
+          <input
+            type="color"
+            value={colorHex}
+            onChange={(e) => onColor(e.target.value)}
+            aria-label={strings.workspace.styleColor}
+            className="h-6 w-9 rounded border border-input bg-background cursor-pointer"
+          />
+          <span className="font-mono text-[11px] text-muted-foreground uppercase">{colorHex}</span>
+        </span>
+      </label>
+    </div>
+  )
+}
+
+function SliderRow({
+  label,
+  value,
+  min,
+  max,
+  step,
+  formatValue,
+  onChange,
+}: {
+  label: string
+  value: number
+  min: number
+  max: number
+  step: number
+  formatValue: (v: number) => string
+  onChange: (v: number) => void
+}): JSX.Element {
+  return (
+    <label className="block">
+      <span className="flex items-center justify-between text-xs mb-1">
+        <span className="text-foreground">{label}</span>
+        <span className="font-mono text-muted-foreground">{formatValue(value)}</span>
+      </span>
+      <input
+        type="range"
+        min={min}
+        max={max}
+        step={step}
+        value={value}
+        onChange={(e) => onChange(Number(e.target.value))}
+        className="w-full accent-foreground"
+      />
+    </label>
   )
 }
 

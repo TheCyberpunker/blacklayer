@@ -7,7 +7,8 @@ export type RedactionMode = 'solid' | 'blur' | 'pixelate'
  * Redaction rectangle in normalized coordinates relative to the rendered base.
  * x, y, w, h are all in [0, 1]. Multiply by base intrinsic dimensions to draw.
  * `mode` is fixed at rect creation time so a document can mix modes if the user
- * changes selection mid-session.
+ * changes selection mid-session. `color` only applies when mode === 'solid';
+ * blur and pixelate ignore it. Values in [0, 1] per channel to match pdf-lib.
  */
 export interface RedactionRect {
   id: string
@@ -16,6 +17,7 @@ export interface RedactionRect {
   w: number
   h: number
   mode: RedactionMode
+  color?: { r: number; g: number; b: number }
 }
 
 export interface WatermarkText {
@@ -68,6 +70,10 @@ const NO_PATTERNS = { crosshatch: false, frame: false }
 export interface ProfileOverrides {
   crosshatch?: boolean
   frame?: boolean
+  opacity?: number
+  rotationDeg?: number
+  fontSize?: number
+  color?: { r: number; g: number; b: number }
 }
 
 export function profileFor(
@@ -82,6 +88,10 @@ export function profileFor(
     watermark: {
       ...base.watermark,
       seed,
+      opacity: overrides.opacity ?? base.watermark.opacity,
+      rotationDeg: overrides.rotationDeg ?? base.watermark.rotationDeg,
+      fontSize: overrides.fontSize ?? base.watermark.fontSize,
+      color: overrides.color ?? base.watermark.color,
       patterns: {
         crosshatch: overrides.crosshatch ?? base.watermark.patterns.crosshatch,
         frame: overrides.frame ?? base.watermark.patterns.frame,
@@ -115,15 +125,15 @@ function baseProfile(level: ProtectionLevel, text: WatermarkText): ProtectionPro
         level,
         watermark: {
           text,
-          opacity: 0.2,
+          opacity: 0.32,
           rotationDeg: -28,
-          fontSize: 34,
+          fontSize: 14,
           tile: true,
           tileGapX: 320,
           tileGapY: 240,
           color: BASE_COLOR,
           seed: 0,
-          jitter: 0.15,
+          jitter: 0,
           patterns: NO_PATTERNS,
         },
         metadata: 'neutralize',
@@ -133,15 +143,15 @@ function baseProfile(level: ProtectionLevel, text: WatermarkText): ProtectionPro
         level,
         watermark: {
           text,
-          opacity: 0.26,
+          opacity: 0.4,
           rotationDeg: -28,
-          fontSize: 32,
+          fontSize: 14,
           tile: true,
           tileGapX: 240,
           tileGapY: 190,
           color: BASE_COLOR,
           seed: 0,
-          jitter: 0.25,
+          jitter: 0,
           patterns: { crosshatch: true, frame: true },
         },
         metadata: 'neutralize',

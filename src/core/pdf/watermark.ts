@@ -4,6 +4,7 @@ import { formatWatermarkLines } from '../types.ts'
 import { applyMetadataMode, hasDigitalSignature } from './metadata.ts'
 import { rasterizePageWithRedactions } from './rasterize-page.ts'
 import { mulberry32 } from '../random/prng.ts'
+import { drawWavyPage } from '../watermark/wavy.ts'
 
 export interface ApplyPdfWatermarkArgs {
   source: ArrayBuffer
@@ -48,10 +49,11 @@ export async function applyPdfWatermark({
   const font = await pdf.embedFont(StandardFonts.HelveticaBold)
   const options = profile.watermark
   const lines = formatWatermarkLines(options.text, lang)
+  const canUseCanvas = typeof document !== 'undefined' && typeof document.createElement === 'function'
 
   const pages = pdf.getPages()
   for (const page of pages) {
-    drawWatermarkOnPdfPage(page, font, lines, options)
+    await drawWatermarkOnPdfPage(pdf, page, font, lines, options, canUseCanvas)
   }
 
   applyMetadataMode(pdf, profile.metadata)
@@ -60,50 +62,162 @@ export async function applyPdfWatermark({
   return { bytes, hadDigitalSignature: hadSignature, rasterizedPages: rasterized.sort((a, b) => a - b) }
 }
 
-function drawWatermarkOnPdfPage(
+async function drawWatermarkOnPdfPage(
+  pdf: PDFDocument,
   page: ReturnType<PDFDocument['getPages']>[number],
   font: Awaited<ReturnType<PDFDocument['embedFont']>>,
   lines: string[],
   options: WatermarkOptions,
-): void {
+  canUseCanvas: boolean,
+): Promise<void> {
   const { width, height } = page.getSize()
   const { r, g, b } = options.color
   const color = rgb(r, g, b)
   const anyLines = lines.some((l) => l.trim())
 
   if (anyLines) {
-    const rng = mulberry32(options.seed || 1)
-    const centered = () => rng() - 0.5
-
     if (options.tile) {
-      const stepX = Math.max(120, options.tileGapX)
-      const stepY = Math.max(120, options.tileGapY)
-      const diagonal = Math.hypot(width, height)
-      const j = Math.max(0, Math.min(1, options.jitter))
-      for (let y = -diagonal; y < diagonal * 2; y += stepY) {
-        for (let x = -diagonal; x < diagonal * 2; x += stepX) {
-          // Mirror the canvas draw path (see core/watermark/draw.ts). Tighter
-          // multipliers keep the pattern readable without turning it into noise.
-          const dx = centered() * options.tileGapX * 0.25 * j
-          const dy = centered() * options.tileGapY * 0.25 * j
-          const rot = options.rotationDeg + centered() * 8 * j
-          const opacityMul = 1 + centered() * 0.35 * j
-          const opacity = Math.max(0.05, Math.min(1, options.opacity * opacityMul))
-          const sizeMul = 1 + centered() * 0.2 * j
-          const size = Math.max(10, options.fontSize * sizeMul)
-          drawPdfBlock(page, lines, font, x + dx, y + dy, rot, size, opacity, color)
-        }
+      const rowText = lines.filter((l) => l.trim()).join('  ·  ')
+      if (canUseCanvas) {
+        // Browser export: render the wavy pattern to an offscreen canvas,
+        // embed as a single image stamp. One drawImage per page beats
+        // thousands of per-glyph text ops.
+        await drawPdfWavyViaStamp(pdf, page, rowText, width, height, options)
+      } else {
+        // Node / test fallback: per-glyph drawText. Larger output but keeps
+        // the smoke test dependency-free.
+        const scaleFactor = Math.min(width, height) / 800
+        const fontSize = Math.max(6, options.fontSize * scaleFactor)
+        drawPdfWavy(page, font, rowText, width, height, fontSize, options.opacity, color, options.seed, options.rotationDeg)
       }
     } else {
       drawPdfBlock(page, lines, font, width / 2, height / 2, options.rotationDeg, options.fontSize, options.opacity, color)
     }
   }
 
-  if (options.patterns.crosshatch) {
-    drawPdfCrosshatch(page, width, height, options, color)
-  }
-  if (options.patterns.frame) {
-    drawPdfFrame(page, width, height, options, color)
+  if (options.patterns.crosshatch) drawPdfCrosshatch(page, width, height, options, color)
+  if (options.patterns.frame) drawPdfFrame(page, width, height, options, color)
+}
+
+async function drawPdfWavyViaStamp(
+  pdf: PDFDocument,
+  page: ReturnType<PDFDocument['getPages']>[number],
+  text: string,
+  pageWidth: number,
+  pageHeight: number,
+  options: WatermarkOptions,
+): Promise<void> {
+  // Render at 2× the page point size so the stamp holds up under viewer zoom.
+  const scale = 2
+  const w = Math.max(1, Math.floor(pageWidth * scale))
+  const h = Math.max(1, Math.floor(pageHeight * scale))
+  const canvas = document.createElement('canvas')
+  canvas.width = w
+  canvas.height = h
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+
+  // Transparent background so the stamp overlays the source page cleanly.
+  // Base off options.fontSize so the Advanced "Text size" slider actually moves
+  // the pattern in the export.
+  const fontSize = Math.max(6, Math.round(options.fontSize * (Math.min(w, h) / 800)))
+  const { r, g, b } = options.color
+  const rr = Math.round(r * 255)
+  const gg = Math.round(g * 255)
+  const bb = Math.round(b * 255)
+  const colorBase = (alpha: number) => `rgba(${rr}, ${gg}, ${bb}, ${alpha})`
+
+  drawWavyPage({
+    ctx,
+    width: w,
+    height: h,
+    text,
+    fontSize,
+    opacity: options.opacity,
+    color: colorBase,
+    seed: options.seed,
+    baseRotationDeg: options.rotationDeg,
+  })
+
+  const pngBlob = await new Promise<Blob>((resolve, reject) => {
+    canvas.toBlob(
+      (b) => (b ? resolve(b) : reject(new Error('toBlob returned null'))),
+      'image/png',
+    )
+  })
+  const pngBytes = new Uint8Array(await pngBlob.arrayBuffer())
+  const stamp = await pdf.embedPng(pngBytes)
+  page.drawImage(stamp, { x: 0, y: 0, width: pageWidth, height: pageHeight })
+}
+
+function drawPdfWavy(
+  page: ReturnType<PDFDocument['getPages']>[number],
+  font: Awaited<ReturnType<PDFDocument['embedFont']>>,
+  text: string,
+  width: number,
+  height: number,
+  fontSize: number,
+  opacity: number,
+  color: ReturnType<typeof rgb>,
+  seed: number,
+  baseRotationDeg: number,
+): void {
+  const rng = mulberry32(seed || 1)
+  const baseRotRad = (baseRotationDeg * Math.PI) / 180
+  const cx = width / 2
+  const cy = height / 2
+
+  const diag = Math.hypot(width, height)
+  const halfW = diag / 2
+  const halfH = diag / 2
+
+  // Denser rows and per-glyph shadow would balloon the PDF file size (every
+  // drawText emits a text-showing operator). We keep the row gap wider than the
+  // canvas preview to trade a small amount of visual density for a much smaller
+  // output file, and skip the shadow pass in the PDF path.
+  const rowGap = fontSize * 3.2
+  const amplitude = fontSize * 1.0
+  const wavelength = Math.max(fontSize * 7, width * 0.45)
+  const omega = (2 * Math.PI) / wavelength
+
+  const chars = [...(text + '   ')]
+
+  const cosR = Math.cos(baseRotRad)
+  const sinR = Math.sin(baseRotRad)
+  const toPage = (rx: number, ry: number): { x: number; y: number } => ({
+    x: cx + rx * cosR - ry * sinR,
+    y: cy + rx * sinR + ry * cosR,
+  })
+
+  for (let baseY = -halfH; baseY <= halfH; baseY += rowGap) {
+    const yOffset = (rng() - 0.5) * fontSize * 0.15
+    const phase = rng() * Math.PI * 2
+    let idx = 0
+    let dist = 0
+    const totalLen = halfW * 2
+    while (dist < totalLen) {
+      const ch = chars[idx % chars.length] || ' '
+      idx++
+      const cw = font.widthOfTextAtSize(ch, fontSize)
+      const mid = dist + cw / 2
+      const t = mid * omega + phase
+      const localX = -halfW + mid
+      const localY = baseY + yOffset + Math.sin(t) * amplitude
+      const slope = Math.cos(t) * amplitude * omega
+      const angleLocal = Math.atan(slope)
+      const anchorLocalY = localY - fontSize * 0.35
+      const anchor = toPage(localX - cw / 2, anchorLocalY)
+      page.drawText(ch, {
+        x: anchor.x,
+        y: anchor.y,
+        size: fontSize,
+        font,
+        color,
+        opacity,
+        rotate: degrees(((baseRotRad + angleLocal) * 180) / Math.PI),
+      })
+      dist += cw
+    }
   }
 }
 

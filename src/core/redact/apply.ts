@@ -28,7 +28,7 @@ export function applyRedactionsToCanvas(
     if (rw <= 0 || rh <= 0) continue
     switch (r.mode) {
       case 'solid':
-        drawSolid(ctx, rx, ry, rw, rh)
+        drawSolid(ctx, rx, ry, rw, rh, r.color)
         break
       case 'blur':
         drawBlurred(ctx, src, rx, ry, rw, rh)
@@ -40,9 +40,18 @@ export function applyRedactionsToCanvas(
   }
 }
 
-function drawSolid(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number): void {
+function drawSolid(
+  ctx: CanvasRenderingContext2D,
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  color?: { r: number; g: number; b: number },
+): void {
   ctx.save()
-  ctx.fillStyle = '#000000'
+  const c = color ?? { r: 0, g: 0, b: 0 }
+  const to = (n: number) => Math.round(Math.max(0, Math.min(1, n)) * 255)
+  ctx.fillStyle = `rgb(${to(c.r)}, ${to(c.g)}, ${to(c.b)})`
   ctx.fillRect(x, y, w, h)
   ctx.restore()
 }
