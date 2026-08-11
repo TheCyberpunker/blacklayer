@@ -95,6 +95,48 @@ export function fileFromBlob(blob: Blob, originalName: string, tag: string): Fil
 }
 
 /**
+ * Apply linear brightness + contrast to an image. Both inputs are in the
+ * -100..100 range (0 = identity). Brightness shifts each channel additively;
+ * contrast scales around the midpoint 128 using the standard formula.
+ * A no-op call returns a canvas re-encode; callers should short-circuit when
+ * both values are 0 to save the round-trip.
+ */
+export async function tuneImageFile(
+  file: File,
+  brightness: number,
+  contrast: number,
+): Promise<AdjustResult> {
+  const bitmap = await createImageBitmap(file)
+  const canvas = document.createElement('canvas')
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('canvas 2d context unavailable')
+  ctx.drawImage(bitmap, 0, 0)
+  bitmap.close?.()
+
+  const b = Math.max(-100, Math.min(100, brightness)) * 2.55 // ~ -255..255
+  const cFactor = (100 + Math.max(-100, Math.min(100, contrast))) / 100
+  const data = ctx.getImageData(0, 0, canvas.width, canvas.height)
+  const px = data.data
+  for (let i = 0; i < px.length; i += 4) {
+    let r = px[i]! + b
+    let g = px[i + 1]! + b
+    let bl = px[i + 2]! + b
+    r = (r - 128) * cFactor + 128
+    g = (g - 128) * cFactor + 128
+    bl = (bl - 128) * cFactor + 128
+    px[i] = Math.max(0, Math.min(255, r))
+    px[i + 1] = Math.max(0, Math.min(255, g))
+    px[i + 2] = Math.max(0, Math.min(255, bl))
+  }
+  ctx.putImageData(data, 0, 0)
+  const mime = chooseMimeFrom(file)
+  const blob = await encode(canvas, mime)
+  return { blob, filename: file.name }
+}
+
+/**
  * Crop an image to the given normalized rectangle (top-left origin, values in
  * 0..1). The output is bytes-of-the-crop-region only, so the resulting image is
  * strictly smaller than the input.

@@ -103,7 +103,7 @@ export function usePresets(): UsePresets {
  */
 export function clearAllLocalSettings(): void {
   if (typeof window === 'undefined') return
-  const keys = ['blacklayer.presets', 'blacklayer.theme', 'blacklayer.lang']
+  const keys = ['blacklayer.presets', 'blacklayer.theme', 'blacklayer.lang', 'blacklayer.seen-intro']
   for (const k of keys) {
     try {
       window.localStorage.removeItem(k)

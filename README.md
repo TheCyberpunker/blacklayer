@@ -77,6 +77,7 @@ Rough shape of what is planned. Nothing here is a commitment; priorities move as
 
 - Local OCR for image documents so photos of IDs, passports, and driving licences get the same content-based detection PDFs already do. First pass will target Spanish and English via a bundled, offline engine.
 - First-run onboarding for people who land on the app cold.
+- More security patterns beyond the current crosshatch and frame: guilloche, rosette, moiré, mesh, and a distinctly decorative iridescent (holographic-style) overlay. Explicitly not on the table: simulating real, official government hologram foils. The line is watermark vs. counterfeit. Everything in this list is decorative and clearly reads as user-added, never as a claim of authenticity.
 
 **Later research**
 

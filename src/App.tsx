@@ -34,7 +34,7 @@ import { purposesFor, recommendedLevel } from './core/detect/templates.ts'
 import { templateFor, type CardSide, type DocumentTemplate, type FieldRect, type TemplateProfile } from './core/templates/index.ts'
 import { generateSeed } from './core/random/seed.ts'
 import { hexToRgb01, rgb01ToHex } from './lib/color.ts'
-import { Contrast, Crop, RotateCcw, RotateCw, Search } from 'lucide-react'
+import { Contrast, Crop, RotateCcw, RotateCw, Search, SlidersHorizontal } from 'lucide-react'
 import { Button } from './components/ui/button.tsx'
 import { Input } from './components/ui/input.tsx'
 import { Label } from './components/ui/label.tsx'
@@ -145,6 +145,34 @@ export function App(): JSX.Element {
   const [howOpen, setHowOpen] = useState(false)
   const [privacyOpen, setPrivacyOpen] = useState(false)
 
+  // First-run onboarding: auto-open the "How it works" dialog once per browser,
+  // shortly after mount so the UI settles first. Marking `seen-intro` on close
+  // guarantees this fires exactly once per device unless the user wipes local
+  // settings via the Advanced panel.
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    try {
+      if (window.localStorage.getItem('blacklayer.seen-intro') === '1') return
+    } catch {
+      return
+    }
+    const id = window.setTimeout(() => setHowOpen(true), 600)
+    return () => window.clearTimeout(id)
+  }, [])
+
+  useEffect(() => {
+    if (!howOpen) return
+    // When the user closes the intro dialog, remember it so subsequent visits
+    // land straight in the workspace.
+    return () => {
+      try {
+        window.localStorage.setItem('blacklayer.seen-intro', '1')
+      } catch {
+        // storage disabled or quota full — accept the intro re-showing next time
+      }
+    }
+  }, [howOpen])
+
   const [loading, setLoading] = useState(false)
   const [loaded, setLoaded] = useState<LoadedFile | null>(null)
   const [batch, setBatch] = useState<BatchItem[]>([])
@@ -179,6 +207,9 @@ export function App(): JSX.Element {
   const [imageGrayscale, setImageGrayscale] = useState<boolean>(false)
   const [cropMode, setCropMode] = useState(false)
   const [cropRect, setCropRect] = useState<{ x: number; y: number; w: number; h: number } | null>(null)
+  const [imageBrightness, setImageBrightness] = useState<number>(0)
+  const [imageContrast, setImageContrast] = useState<number>(0)
+  const [tuneOpen, setTuneOpen] = useState<boolean>(false)
   const [selectedRectId, setSelectedRectId] = useState<string | null>(null)
   // Drag interaction on the preview canvas has four possible modes: creating a
   // new redaction rect, moving an existing one, resizing an existing one via
@@ -413,6 +444,9 @@ export function App(): JSX.Element {
       setOriginalImageFile(kind === 'image' ? f : null)
       setImageRotationDeg(0)
       setImageGrayscale(false)
+      setImageBrightness(0)
+      setImageContrast(0)
+      setTuneOpen(false)
       setCropMode(false)
       setCropRect(null)
       setCompareMode('protected')
@@ -486,6 +520,9 @@ export function App(): JSX.Element {
     setOriginalImageFile(null)
     setImageRotationDeg(0)
     setImageGrayscale(false)
+    setImageBrightness(0)
+    setImageContrast(0)
+    setTuneOpen(false)
     setCropMode(false)
     setCropRect(null)
     setActivePageIndex(0)
@@ -1200,21 +1237,21 @@ export function App(): JSX.Element {
     }
   }, [cropMode, cropRect, loaded, anyRedactions, t, loadFileIntoState])
 
-  const applyAdjust = useCallback(
-    async (kind: 'rotate-left' | 'rotate-right' | 'grayscale') => {
-      if (!loaded || loaded.kind !== 'image' || !originalImageFile) return
-
-      // Compute the target adjustment values without mutating state yet, so
-      // the derivation always runs from the immutable original.
-      const willRotate = kind !== 'grayscale'
-      if (willRotate && anyRedactions) {
-        if (!window.confirm(t.workspace.adjustConfirmClearRedactions)) return
-      }
-      const nextRotation = willRotate
-        ? (imageRotationDeg + (kind === 'rotate-right' ? 90 : 270)) % 360
-        : imageRotationDeg
-      const nextGrayscale = kind === 'grayscale' ? !imageGrayscale : imageGrayscale
-
+  // Single derivation helper: takes the target flag values, always applies them
+  // to the immutable originalImageFile, and reloads. Used by rotate, grayscale,
+  // and brightness / contrast so they compose cleanly.
+  const rederiveImage = useCallback(
+    async (target: {
+      rotationDeg?: number
+      grayscale?: boolean
+      brightness?: number
+      contrast?: number
+    }) => {
+      if (!originalImageFile) return
+      const nextRotation = target.rotationDeg ?? imageRotationDeg
+      const nextGrayscale = target.grayscale ?? imageGrayscale
+      const nextBrightness = target.brightness ?? imageBrightness
+      const nextContrast = target.contrast ?? imageContrast
       setAdjusting(true)
       try {
         const mod = await import('./core/image/adjust.ts')
@@ -1223,20 +1260,63 @@ export function App(): JSX.Element {
           const r = await mod.rotateImageFile(file, nextRotation)
           file = mod.fileFromBlob(r.blob, r.filename, '')
         }
+        if (nextBrightness !== 0 || nextContrast !== 0) {
+          const r = await mod.tuneImageFile(file, nextBrightness, nextContrast)
+          file = mod.fileFromBlob(r.blob, r.filename, '')
+        }
         if (nextGrayscale) {
           const r = await mod.grayscaleImageFile(file)
           file = mod.fileFromBlob(r.blob, r.filename, '')
         }
         setImageRotationDeg(nextRotation)
         setImageGrayscale(nextGrayscale)
-        if (willRotate && anyRedactions) setRedactionsByPage(new Map())
+        setImageBrightness(nextBrightness)
+        setImageContrast(nextContrast)
         await loadFileIntoState(file, 'image', false)
       } finally {
         setAdjusting(false)
       }
     },
-    [loaded, originalImageFile, imageRotationDeg, imageGrayscale, anyRedactions, t, loadFileIntoState],
+    [originalImageFile, imageRotationDeg, imageGrayscale, imageBrightness, imageContrast, loadFileIntoState],
   )
+
+  const applyAdjust = useCallback(
+    async (kind: 'rotate-left' | 'rotate-right' | 'grayscale') => {
+      if (!loaded || loaded.kind !== 'image' || !originalImageFile) return
+      const willRotate = kind !== 'grayscale'
+      if (willRotate && anyRedactions) {
+        if (!window.confirm(t.workspace.adjustConfirmClearRedactions)) return
+      }
+      if (willRotate) {
+        const delta = kind === 'rotate-right' ? 90 : 270
+        const nextRotation = (imageRotationDeg + delta) % 360
+        if (anyRedactions) setRedactionsByPage(new Map())
+        await rederiveImage({ rotationDeg: nextRotation })
+      } else {
+        await rederiveImage({ grayscale: !imageGrayscale })
+      }
+    },
+    [loaded, originalImageFile, imageRotationDeg, imageGrayscale, anyRedactions, t, rederiveImage],
+  )
+
+  // Debounced re-derivation on brightness / contrast slider release.
+  const debouncedBrightness = useDebounced(imageBrightness, 120)
+  const debouncedContrast = useDebounced(imageContrast, 120)
+  const initialTuneRef = useRef(true)
+  useEffect(() => {
+    if (!originalImageFile) return
+    if (initialTuneRef.current) {
+      initialTuneRef.current = false
+      return
+    }
+    void rederiveImage({ brightness: debouncedBrightness, contrast: debouncedContrast })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [debouncedBrightness, debouncedContrast])
+
+  const resetTune = useCallback(() => {
+    setImageBrightness(0)
+    setImageContrast(0)
+  }, [])
 
   // ---------- Slider divider handlers ----------
 
@@ -1404,6 +1484,13 @@ export function App(): JSX.Element {
             adjusting={adjusting}
             onAdjust={applyAdjust}
             grayscaleActive={imageGrayscale}
+            tuneOpen={tuneOpen}
+            onToggleTune={() => setTuneOpen((v) => !v)}
+            brightness={imageBrightness}
+            contrast={imageContrast}
+            onBrightnessChange={setImageBrightness}
+            onContrastChange={setImageContrast}
+            onResetTune={resetTune}
             cropMode={cropMode}
             cropRect={cropRect}
             onStartCrop={startCropMode}
@@ -1843,6 +1930,13 @@ interface WorkspaceProps {
   adjusting: boolean
   onAdjust: (kind: 'rotate-left' | 'rotate-right' | 'grayscale') => void
   grayscaleActive: boolean
+  tuneOpen: boolean
+  onToggleTune: () => void
+  brightness: number
+  contrast: number
+  onBrightnessChange: (v: number) => void
+  onContrastChange: (v: number) => void
+  onResetTune: () => void
   cropMode: boolean
   cropRect: { x: number; y: number; w: number; h: number } | null
   onStartCrop: () => void
@@ -1943,6 +2037,13 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     adjusting,
     onAdjust,
     grayscaleActive,
+    tuneOpen,
+    onToggleTune,
+    brightness,
+    contrast,
+    onBrightnessChange,
+    onContrastChange,
+    onResetTune,
     cropMode,
     cropRect,
     onStartCrop,
@@ -2100,6 +2201,21 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                     </TooltipTrigger>
                     <TooltipContent>{strings.workspace.adjustCrop}</TooltipContent>
                   </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant={tuneOpen ? 'default' : 'ghost'}
+                        size="icon"
+                        onClick={onToggleTune}
+                        disabled={adjusting}
+                        aria-label={strings.workspace.adjustTuneToggle}
+                        aria-pressed={tuneOpen}
+                      >
+                        <SlidersHorizontal className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{strings.workspace.adjustTuneToggle}</TooltipContent>
+                  </Tooltip>
                 </div>
               )}
               <span className="text-[11px] font-mono text-muted-foreground shrink-0">
@@ -2222,6 +2338,42 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               redactionsByPage={redactionsByPageMap}
               strings={strings}
             />
+          )}
+
+          {loaded.kind === 'image' && tuneOpen && (
+            <div className="mt-3 rounded-lg border border-border p-3 space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-medium text-foreground">
+                  {strings.workspace.adjustTuneToggle}
+                </span>
+                <button
+                  type="button"
+                  onClick={onResetTune}
+                  disabled={adjusting}
+                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                >
+                  {strings.workspace.adjustTuneReset}
+                </button>
+              </div>
+              <SliderRow
+                label={strings.workspace.adjustBrightness}
+                value={brightness}
+                min={-100}
+                max={100}
+                step={1}
+                formatValue={(v) => (v > 0 ? `+${Math.round(v)}` : `${Math.round(v)}`)}
+                onChange={onBrightnessChange}
+              />
+              <SliderRow
+                label={strings.workspace.adjustContrast}
+                value={contrast}
+                min={-100}
+                max={100}
+                step={1}
+                formatValue={(v) => (v > 0 ? `+${Math.round(v)}` : `${Math.round(v)}`)}
+                onChange={onContrastChange}
+              />
+            </div>
           )}
         </div>
       </section>

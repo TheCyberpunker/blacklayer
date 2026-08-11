@@ -176,6 +176,10 @@ export interface Strings {
     adjustCropCancel: string
     adjustCropTooSmall: string
     adjustConfirmClearRedactions: string
+    adjustTuneToggle: string
+    adjustBrightness: string
+    adjustContrast: string
+    adjustTuneReset: string
     selectionHint: string
     deleteSelected: string
   }
@@ -420,6 +424,10 @@ export const enStrings: Strings = {
     adjustCropCancel: 'Cancel',
     adjustCropTooSmall: 'Selection is too small.',
     adjustConfirmClearRedactions: 'This adjustment will clear the redactions you drew. Continue?',
+    adjustTuneToggle: 'Brightness & contrast',
+    adjustBrightness: 'Brightness',
+    adjustContrast: 'Contrast',
+    adjustTuneReset: 'Reset',
     selectionHint: 'Click a hidden area to move or resize it. Delete removes it, Esc deselects.',
     deleteSelected: 'Delete selected',
   },
@@ -664,6 +672,10 @@ export const esStrings: Strings = {
     adjustCropCancel: 'Cancelar',
     adjustCropTooSmall: 'La selección es demasiado pequeña.',
     adjustConfirmClearRedactions: 'Este ajuste eliminará las zonas que hayas ocultado. ¿Continuar?',
+    adjustTuneToggle: 'Brillo y contraste',
+    adjustBrightness: 'Brillo',
+    adjustContrast: 'Contraste',
+    adjustTuneReset: 'Restablecer',
     selectionHint: 'Toca una zona oculta para moverla o cambiar su tamaño. Supr la elimina, Esc deselecciona.',
     deleteSelected: 'Eliminar selección',
   },
