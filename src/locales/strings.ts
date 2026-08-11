@@ -33,6 +33,7 @@ export interface Strings {
     choose: string
     supported: string
     privacy: string
+    multiHint: string
   }
   workspace: {
     documentLabel: string
@@ -139,6 +140,8 @@ export interface Strings {
     batchCombineButton: string
     batchCombineWorking: string
     batchCombineOnlyImages: string
+    batchCombineRecommended: string
+    batchCombineTwoSides: string
     downloadNameLabel: string
     downloadNameHint: string
     templateTitle: (docLabel: string) => string
@@ -180,6 +183,11 @@ export interface Strings {
     adjustBrightness: string
     adjustContrast: string
     adjustTuneReset: string
+    addAnotherPhoto: string
+    addAnotherPhotoConfirmClear: string
+    addAnotherPromptTitle: string
+    addAnotherPromptDismiss: string
+    addAnotherPromptAction: string
     selectionHint: string
     deleteSelected: string
   }
@@ -266,6 +274,7 @@ export const enStrings: Strings = {
     choose: 'Choose document',
     supported: 'PDF, JPG, PNG and WebP',
     privacy: 'Your documents never leave this device.',
+    multiHint: 'Drop both sides of an ID together to combine them into one document.',
   },
   workspace: {
     documentLabel: 'Document',
@@ -386,6 +395,8 @@ export const enStrings: Strings = {
     batchCombineButton: 'Combine into one PDF',
     batchCombineWorking: 'Combining…',
     batchCombineOnlyImages: 'Only image files can be combined. Remove any PDFs from the batch first.',
+    batchCombineRecommended: 'Recommended',
+    batchCombineTwoSides: 'These look like the two sides of one document. Combining them lets the template pick the right side per page.',
     downloadNameLabel: 'File name',
     downloadNameHint: 'You can rename the file before downloading it.',
     templateTitle: (docLabel) => `${docLabel} quick template`,
@@ -428,6 +439,12 @@ export const enStrings: Strings = {
     adjustBrightness: 'Brightness',
     adjustContrast: 'Contrast',
     adjustTuneReset: 'Reset',
+    addAnotherPhoto: 'Add another photo',
+    addAnotherPhotoConfirmClear:
+      'Adding a second photo will combine both into a two-page document. Any redactions on this photo will be cleared. Continue?',
+    addAnotherPromptTitle: 'Have a second photo of the same document?',
+    addAnotherPromptAction: 'Add another photo',
+    addAnotherPromptDismiss: 'No, continue',
     selectionHint: 'Click a hidden area to move or resize it. Delete removes it, Esc deselects.',
     deleteSelected: 'Delete selected',
   },
@@ -514,6 +531,7 @@ export const esStrings: Strings = {
     choose: 'Seleccionar documento',
     supported: 'PDF, JPG, PNG y WebP',
     privacy: 'Tus documentos nunca salen de este dispositivo.',
+    multiHint: 'Arrastra ambas caras de un documento a la vez para combinarlas en un solo archivo.',
   },
   workspace: {
     documentLabel: 'Documento',
@@ -634,6 +652,8 @@ export const esStrings: Strings = {
     batchCombineButton: 'Combinar en un PDF',
     batchCombineWorking: 'Combinando…',
     batchCombineOnlyImages: 'Solo se pueden combinar imágenes. Quita cualquier PDF del lote primero.',
+    batchCombineRecommended: 'Recomendado',
+    batchCombineTwoSides: 'Parecen los dos lados de un mismo documento. Combinarlos permite que la plantilla elija el lado correcto en cada página.',
     downloadNameLabel: 'Nombre del archivo',
     downloadNameHint: 'Puedes cambiar el nombre antes de descargar.',
     templateTitle: (docLabel) => `Plantilla rápida · ${docLabel}`,
@@ -676,6 +696,12 @@ export const esStrings: Strings = {
     adjustBrightness: 'Brillo',
     adjustContrast: 'Contraste',
     adjustTuneReset: 'Restablecer',
+    addAnotherPhoto: 'Añadir otra foto',
+    addAnotherPhotoConfirmClear:
+      'Añadir una segunda foto combinará ambas en un documento de dos páginas. Las zonas ocultas de esta foto se eliminarán. ¿Continuar?',
+    addAnotherPromptTitle: '¿Tienes una segunda foto del mismo documento?',
+    addAnotherPromptAction: 'Añadir otra foto',
+    addAnotherPromptDismiss: 'No, continuar',
     selectionHint: 'Toca una zona oculta para moverla o cambiar su tamaño. Supr la elimina, Esc deselecciona.',
     deleteSelected: 'Eliminar selección',
   },

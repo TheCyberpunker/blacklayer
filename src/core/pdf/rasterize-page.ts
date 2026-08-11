@@ -32,7 +32,13 @@ export async function rasterizePageWithRedactions({
   // which is a Vite-only import syntax.
   const { ensurePdfjs } = await import('../preview/pdfjs.ts')
   const pdfjs = ensurePdfjs()
-  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(sourceBytes) })
+  // pdfjs transfers the underlying ArrayBuffer to its worker. Rasterizing more
+  // than one page from the same source would detach the buffer between calls,
+  // throwing "Cannot perform Construct on a detached ArrayBuffer". Copy the
+  // bytes so each call owns its own buffer.
+  const dataCopy = new Uint8Array(sourceBytes.byteLength)
+  dataCopy.set(new Uint8Array(sourceBytes))
+  const loadingTask = pdfjs.getDocument({ data: dataCopy })
   const doc = await loadingTask.promise
   try {
     const page = await doc.getPage(sourcePageIndex + 1)

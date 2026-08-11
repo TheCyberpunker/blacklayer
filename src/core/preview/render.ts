@@ -82,8 +82,13 @@ async function renderImage(file: File): Promise<RenderedBase> {
 async function renderPdf(file: File): Promise<RenderedBase> {
   const { ensurePdfjs } = await import('./pdfjs.ts')
   const pdfjs = ensurePdfjs()
+  // Own our own bytes: pdfjs transfers the underlying ArrayBuffer to its worker
+  // and other paths (protect, inspectPdf, text search) read from the same File
+  // afterwards.
   const buf = await file.arrayBuffer()
-  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(buf) })
+  const data = new Uint8Array(buf.byteLength)
+  data.set(new Uint8Array(buf))
+  const loadingTask = pdfjs.getDocument({ data })
   const doc = await loadingTask.promise
   const totalPages = doc.numPages
 

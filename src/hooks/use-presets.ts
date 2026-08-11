@@ -10,6 +10,11 @@ export interface Preset {
   /** null = use whatever the level default is at apply time. */
   crosshatch: boolean | null
   frame: boolean | null
+  /** Style overrides. null on any field means "keep the level default". */
+  opacity: number | null
+  rotationDeg: number | null
+  fontSize: number | null
+  colorHex: string | null
   createdAt: number
 }
 
@@ -23,7 +28,7 @@ function readStored(): Preset[] {
     if (!raw) return []
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed)) return []
-    return parsed.filter(isPreset)
+    return parsed.filter(isPreset).map(withStyleDefaults)
   } catch {
     return []
   }
@@ -42,6 +47,22 @@ function isPreset(x: unknown): x is Preset {
     (p.frame === null || typeof p.frame === 'boolean') &&
     typeof p.createdAt === 'number'
   )
+}
+
+/**
+ * Fill in any missing style-override fields on a preset object read from
+ * localStorage. Presets saved before these fields existed just get null defaults
+ * so `useMemo`-based code can treat every preset uniformly.
+ */
+function withStyleDefaults(p: Preset): Preset {
+  const withDefaults = p as Preset & Partial<Record<'opacity' | 'rotationDeg' | 'fontSize' | 'colorHex', unknown>>
+  return {
+    ...p,
+    opacity: typeof withDefaults.opacity === 'number' ? withDefaults.opacity : null,
+    rotationDeg: typeof withDefaults.rotationDeg === 'number' ? withDefaults.rotationDeg : null,
+    fontSize: typeof withDefaults.fontSize === 'number' ? withDefaults.fontSize : null,
+    colorHex: typeof withDefaults.colorHex === 'string' ? withDefaults.colorHex : null,
+  }
 }
 
 function nextId(): string {

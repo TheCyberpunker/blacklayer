@@ -34,7 +34,7 @@ import { purposesFor, recommendedLevel } from './core/detect/templates.ts'
 import { templateFor, type CardSide, type DocumentTemplate, type FieldRect, type TemplateProfile } from './core/templates/index.ts'
 import { generateSeed } from './core/random/seed.ts'
 import { hexToRgb01, rgb01ToHex } from './lib/color.ts'
-import { Contrast, Crop, RotateCcw, RotateCw, Search, SlidersHorizontal } from 'lucide-react'
+import { Contrast, Crop, ImagePlus, RotateCcw, RotateCw, Search, SlidersHorizontal } from 'lucide-react'
 import { Button } from './components/ui/button.tsx'
 import { Input } from './components/ui/input.tsx'
 import { Label } from './components/ui/label.tsx'
@@ -210,6 +210,9 @@ export function App(): JSX.Element {
   const [imageBrightness, setImageBrightness] = useState<number>(0)
   const [imageContrast, setImageContrast] = useState<number>(0)
   const [tuneOpen, setTuneOpen] = useState<boolean>(false)
+  // The "add another photo?" prompt appears once per single-image load and
+  // stays until the user either adds a photo or dismisses it. Reset on drop.
+  const [addAnotherPromptOpen, setAddAnotherPromptOpen] = useState(false)
   const [selectedRectId, setSelectedRectId] = useState<string | null>(null)
   // Drag interaction on the preview canvas has four possible modes: creating a
   // new redaction rect, moving an existing one, resizing an existing one via
@@ -447,6 +450,7 @@ export function App(): JSX.Element {
       setImageBrightness(0)
       setImageContrast(0)
       setTuneOpen(false)
+      setAddAnotherPromptOpen(kind === 'image')
       setCropMode(false)
       setCropRect(null)
       setCompareMode('protected')
@@ -466,6 +470,22 @@ export function App(): JSX.Element {
 
   const [combining, setCombining] = useState(false)
 
+  const [frontBackDetected, setFrontBackDetected] = useState<boolean>(false)
+
+  // Whenever the batch contents change, re-check for a front/back filename
+  // pattern so we can recommend the combine flow at exactly the right moment.
+  useEffect(() => {
+    if (batch.length !== 2 || batch.some((it) => it.kind !== 'image')) {
+      setFrontBackDetected(false)
+      return
+    }
+    void (async () => {
+      const { detectFrontBack } = await import('./core/pdf/combine-images.ts')
+      const d = detectFrontBack(batch.map((it) => it.file))
+      setFrontBackDetected(d.detected)
+    })()
+  }, [batch])
+
   const combineBatchToPdf = useCallback(async () => {
     if (!batch.length) return
     if (batch.some((it) => it.kind !== 'image')) {
@@ -475,8 +495,12 @@ export function App(): JSX.Element {
     setError(null)
     setCombining(true)
     try {
-      const files = batch.map((it) => it.file)
-      const { combineImagesToPdf } = await import('./core/pdf/combine-images.ts')
+      const { combineImagesToPdf, detectFrontBack } = await import('./core/pdf/combine-images.ts')
+      // Sort front-first when the pattern is detected so page 1 is always the
+      // anverso, matching the DNI template's auto side-switch.
+      const inputFiles = batch.map((it) => it.file)
+      const { ordered } = detectFrontBack(inputFiles)
+      const files = ordered.length ? [...ordered] : inputFiles
       const pdfBlob = await combineImagesToPdf(files)
       const name = `${
         files[0]?.name.replace(/\.[^.]+$/, '') ?? 'combined'
@@ -485,9 +509,6 @@ export function App(): JSX.Element {
         type: 'application/pdf',
         lastModified: Date.now(),
       })
-      // Leave batch mode, feed the merged PDF back through onFiles so the
-      // normal single-file workflow (thumbnails, per-page redactions,
-      // per-page template) takes over.
       clearBatch()
       const dt = new DataTransfer()
       dt.items.add(combinedFile)
@@ -523,6 +544,7 @@ export function App(): JSX.Element {
     setImageBrightness(0)
     setImageContrast(0)
     setTuneOpen(false)
+    setAddAnotherPromptOpen(false)
     setCropMode(false)
     setCropRect(null)
     setActivePageIndex(0)
@@ -567,6 +589,10 @@ export function App(): JSX.Element {
     setLevelTouched(true)
     setCrosshatchOverride(p.crosshatch)
     setFrameOverride(p.frame)
+    setOpacityOverride(p.opacity)
+    setRotationOverride(p.rotationDeg)
+    setFontSizeOverride(p.fontSize)
+    setColorOverride(p.colorHex)
   }, [])
 
   const onSaveCurrentPreset = useCallback(() => {
@@ -583,8 +609,24 @@ export function App(): JSX.Element {
       level,
       crosshatch: crosshatchOverride,
       frame: frameOverride,
+      opacity: opacityOverride,
+      rotationDeg: rotationOverride,
+      fontSize: fontSizeOverride,
+      colorHex: colorOverride,
     })
-  }, [recipient, purpose, level, crosshatchOverride, frameOverride, savePreset, t])
+  }, [
+    recipient,
+    purpose,
+    level,
+    crosshatchOverride,
+    frameOverride,
+    opacityOverride,
+    rotationOverride,
+    fontSizeOverride,
+    colorOverride,
+    savePreset,
+    t,
+  ])
 
   const onClearAllPresets = useCallback(() => {
     if (!presets.length) return
@@ -1318,6 +1360,60 @@ export function App(): JSX.Element {
     setImageContrast(0)
   }, [])
 
+  // "Add another photo" flow — the discoverable single-step way to end up
+  // with a 2-page combined document without knowing OS multi-select shortcuts.
+  // Reads the second file from a hidden file input, combines with the current
+  // image via the same code path as the batch combine, hands the PDF back to
+  // the normal single-file loader.
+  const addAnotherPhotoInputRef = useRef<HTMLInputElement>(null)
+
+  const requestAddAnotherPhoto = useCallback(() => {
+    if (!loaded || loaded.kind !== 'image') return
+    if (anyRedactions) {
+      if (!window.confirm(t.workspace.addAnotherPhotoConfirmClear)) return
+    }
+    addAnotherPhotoInputRef.current?.click()
+  }, [loaded, anyRedactions, t])
+
+  const onAddAnotherPhoto = useCallback(
+    async (e: React.ChangeEvent<HTMLInputElement>) => {
+      const secondFile = e.target.files?.[0]
+      // Always reset the input so picking the same file twice still fires onChange.
+      if (e.target.value) e.target.value = ''
+      if (!secondFile || !loaded || loaded.kind !== 'image') return
+      const secondKind = detectKind(secondFile)
+      if (secondKind !== 'image') {
+        setError(t.errors.unsupported)
+        return
+      }
+      setError(null)
+      setAddAnotherPromptOpen(false)
+      setCombining(true)
+      try {
+        const { combineImagesToPdf, detectFrontBack } = await import('./core/pdf/combine-images.ts')
+        const currentFile = loaded.file
+        const inputs = [currentFile, secondFile]
+        const { ordered } = detectFrontBack(inputs)
+        const files = ordered.length ? [...ordered] : inputs
+        const pdfBlob = await combineImagesToPdf(files)
+        const name = `${files[0]?.name.replace(/\.[^.]+$/, '') ?? 'combined'}-combined.pdf`
+        const combinedFile = new File([pdfBlob], name, {
+          type: 'application/pdf',
+          lastModified: Date.now(),
+        })
+        const dt = new DataTransfer()
+        dt.items.add(combinedFile)
+        await onFiles(dt.files)
+      } catch (err) {
+        const msg = err instanceof Error ? err.message : String(err)
+        setError(`${t.errors.failed}: ${msg}`)
+      } finally {
+        setCombining(false)
+      }
+    },
+    [loaded, t, onFiles],
+  )
+
   // ---------- Slider divider handlers ----------
 
   const onDividerPointerDown = useCallback((e: React.PointerEvent<HTMLDivElement>) => {
@@ -1393,6 +1489,7 @@ export function App(): JSX.Element {
             onCombineToPdf={combineBatchToPdf}
             combining={combining}
             allImages={batch.length > 0 && batch.every((it) => it.kind === 'image')}
+            frontBackDetected={frontBackDetected}
             recipient={recipient}
             purpose={purpose}
             level={level}
@@ -1496,6 +1593,11 @@ export function App(): JSX.Element {
             onStartCrop={startCropMode}
             onCancelCrop={cancelCropMode}
             onApplyCrop={applyCrop}
+            onAddAnotherPhoto={requestAddAnotherPhoto}
+            addAnotherPhotoInputRef={addAnotherPhotoInputRef}
+            onAddAnotherPhotoPicked={onAddAnotherPhoto}
+            addAnotherPromptOpen={addAnotherPromptOpen}
+            onDismissAddAnotherPrompt={() => setAddAnotherPromptOpen(false)}
             presets={presets}
             onApplyPreset={applyPreset}
             onSavePreset={onSaveCurrentPreset}
@@ -1942,6 +2044,11 @@ interface WorkspaceProps {
   onStartCrop: () => void
   onCancelCrop: () => void
   onApplyCrop: () => void
+  onAddAnotherPhoto: () => void
+  addAnotherPhotoInputRef: React.RefObject<HTMLInputElement>
+  onAddAnotherPhotoPicked: (e: React.ChangeEvent<HTMLInputElement>) => void
+  addAnotherPromptOpen: boolean
+  onDismissAddAnotherPrompt: () => void
   presets: Preset[]
   onApplyPreset: (p: Preset) => void
   onSavePreset: () => void
@@ -2049,6 +2156,11 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     onStartCrop,
     onCancelCrop,
     onApplyCrop,
+    onAddAnotherPhoto,
+    addAnotherPhotoInputRef,
+    onAddAnotherPhotoPicked,
+    addAnotherPromptOpen,
+    onDismissAddAnotherPrompt,
     presets,
     onApplyPreset,
     onSavePreset,
@@ -2127,6 +2239,23 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           strings={strings}
           onOverride={onOverrideDetection}
         />
+
+        {addAnotherPromptOpen && loaded.kind === 'image' && loaded.base.totalPages === 1 && (
+          <div className="mb-3 rounded-lg border border-foreground/60 bg-foreground/5 p-3 flex flex-wrap items-center justify-between gap-3 animate-fade-in">
+            <p className="text-sm">
+              {strings.workspace.addAnotherPromptTitle}
+            </p>
+            <div className="flex items-center gap-2 shrink-0">
+              <Button variant="ghost" size="sm" onClick={onDismissAddAnotherPrompt}>
+                {strings.workspace.addAnotherPromptDismiss}
+              </Button>
+              <Button size="sm" onClick={onAddAnotherPhoto}>
+                <ImagePlus className="h-4 w-4" />
+                {strings.workspace.addAnotherPromptAction}
+              </Button>
+            </div>
+          </div>
+        )}
 
         <div
           className={cn(
@@ -2216,6 +2345,27 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                     </TooltipTrigger>
                     <TooltipContent>{strings.workspace.adjustTuneToggle}</TooltipContent>
                   </Tooltip>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        onClick={onAddAnotherPhoto}
+                        disabled={adjusting}
+                        aria-label={strings.workspace.addAnotherPhoto}
+                      >
+                        <ImagePlus className="h-4 w-4" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>{strings.workspace.addAnotherPhoto}</TooltipContent>
+                  </Tooltip>
+                  <input
+                    ref={addAnotherPhotoInputRef}
+                    type="file"
+                    accept="image/jpeg,image/png,image/webp"
+                    className="sr-only"
+                    onChange={onAddAnotherPhotoPicked}
+                  />
                 </div>
               )}
               <span className="text-[11px] font-mono text-muted-foreground shrink-0">
@@ -2907,6 +3057,7 @@ interface BatchWorkspaceProps {
   onCombineToPdf: () => void
   combining: boolean
   allImages: boolean
+  frontBackDetected: boolean
   recipient: string
   purpose: string
   level: ProtectionLevel
@@ -2941,6 +3092,7 @@ function BatchWorkspace(props: BatchWorkspaceProps): JSX.Element {
     onCombineToPdf,
     combining,
     allImages,
+    frontBackDetected,
     recipient,
     purpose,
     level,
@@ -2998,6 +3150,44 @@ function BatchWorkspace(props: BatchWorkspaceProps): JSX.Element {
           </div>
         </div>
 
+        {/* Combine panel — promoted to the top of the batch when it applies, so
+         *  the "two sides of one document" case is the first thing the user
+         *  sees. Highlighted as recommended when filename detection lands. */}
+        {allImages && items.length >= 2 && (
+          <div
+            className={cn(
+              'mb-3 rounded-lg border p-3 space-y-2 transition-colors',
+              frontBackDetected ? 'border-foreground bg-foreground/5' : 'border-border',
+            )}
+          >
+            <div className="flex items-center justify-between gap-2">
+              <div className="flex items-center gap-2 text-sm">
+                <FileText className="h-4 w-4 text-muted-foreground" />
+                <span className="font-medium">{strings.workspace.batchCombineTitle}</span>
+              </div>
+              {frontBackDetected && (
+                <span className="text-[10px] font-mono uppercase tracking-wider text-foreground bg-foreground/10 px-1.5 py-0.5 rounded">
+                  {strings.workspace.batchCombineRecommended}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {frontBackDetected
+                ? strings.workspace.batchCombineTwoSides
+                : strings.workspace.batchCombineHint}
+            </p>
+            <Button
+              variant={frontBackDetected ? 'default' : 'outline'}
+              size="sm"
+              onClick={onCombineToPdf}
+              disabled={combining}
+            >
+              <FileText className="h-4 w-4" />
+              {combining ? strings.workspace.batchCombineWorking : strings.workspace.batchCombineButton}
+            </Button>
+          </div>
+        )}
+
         <div className="rounded-xl border border-border bg-muted/30 p-2">
           <ul className="divide-y divide-border">
             {items.map((it) => (
@@ -3010,22 +3200,6 @@ function BatchWorkspace(props: BatchWorkspaceProps): JSX.Element {
             ))}
           </ul>
         </div>
-
-        {allImages && items.length >= 2 && (
-          <div className="mt-3 rounded-lg border border-border p-3 space-y-2">
-            <div className="flex items-center gap-2 text-sm">
-              <FileText className="h-4 w-4 text-muted-foreground" />
-              <span className="font-medium">{strings.workspace.batchCombineTitle}</span>
-            </div>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              {strings.workspace.batchCombineHint}
-            </p>
-            <Button variant="outline" size="sm" onClick={onCombineToPdf} disabled={combining}>
-              <FileText className="h-4 w-4" />
-              {combining ? strings.workspace.batchCombineWorking : strings.workspace.batchCombineButton}
-            </Button>
-          </div>
-        )}
 
         <p className="mt-3 text-xs text-muted-foreground">{strings.workspace.batchNoRedactionNote}</p>
         {errorCount > 0 && (

@@ -38,7 +38,11 @@ export async function findTextMatches({
   if (!q) return []
   const { ensurePdfjs } = await import('../preview/pdfjs.ts')
   const pdfjs = ensurePdfjs()
-  const loadingTask = pdfjs.getDocument({ data: new Uint8Array(sourceBytes) })
+  // Same detachment guard as rasterize-page.ts — copy so the source ArrayBuffer
+  // survives concurrent or subsequent pdfjs use.
+  const dataCopy = new Uint8Array(sourceBytes.byteLength)
+  dataCopy.set(new Uint8Array(sourceBytes))
+  const loadingTask = pdfjs.getDocument({ data: dataCopy })
   const doc = await loadingTask.promise
   const needle = caseSensitive ? q : q.toLowerCase()
   const matches: SearchMatch[] = []
