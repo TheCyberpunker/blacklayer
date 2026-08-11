@@ -82,16 +82,16 @@ function drawWatermarkOnPdfPage(
       const j = Math.max(0, Math.min(1, options.jitter))
       for (let y = -diagonal; y < diagonal * 2; y += stepY) {
         for (let x = -diagonal; x < diagonal * 2; x += stepX) {
-          const dx = centered() * options.tileGapX * 0.4 * j
-          const dy = centered() * options.tileGapY * 0.4 * j
-          const rot = options.rotationDeg + centered() * 24 * j
-          const opacityMul = 1 + centered() * 0.8 * j
+          // Mirror the canvas draw path (see core/watermark/draw.ts). Tighter
+          // multipliers keep the pattern readable without turning it into noise.
+          const dx = centered() * options.tileGapX * 0.25 * j
+          const dy = centered() * options.tileGapY * 0.25 * j
+          const rot = options.rotationDeg + centered() * 8 * j
+          const opacityMul = 1 + centered() * 0.35 * j
           const opacity = Math.max(0.05, Math.min(1, options.opacity * opacityMul))
-          const sizeMul = 1 + centered() * 0.5 * j
+          const sizeMul = 1 + centered() * 0.2 * j
           const size = Math.max(10, options.fontSize * sizeMul)
-          const shouldEmphasize = j > 0.1 && rng() < 0.12
-          const finalOpacity = shouldEmphasize ? Math.min(1, opacity * 1.7) : opacity
-          drawPdfBlock(page, lines, font, x + dx, y + dy, rot, size, finalOpacity, color)
+          drawPdfBlock(page, lines, font, x + dx, y + dy, rot, size, opacity, color)
         }
       }
     } else {

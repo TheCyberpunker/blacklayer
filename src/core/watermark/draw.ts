@@ -92,37 +92,35 @@ function drawJitteredBlock(
   fontSize: number,
   _lineHeight: number,
   centered: () => number,
-  rng: () => number,
+  _rng: () => number,
   colorBase: (alpha: number) => string,
   paint: (text: string, x: number, y: number) => void,
 ): void {
   const j = Math.max(0, Math.min(1, options.jitter))
 
-  // Position jitter, up to ±40% of tile gap.
-  const dx = centered() * options.tileGapX * 0.4 * j
-  const dy = centered() * options.tileGapY * 0.4 * j
+  // Position jitter, up to ±12.5% of tile gap at j=0.5. Enough to break the grid
+  // without letting adjacent tiles overlap or clip the page content.
+  const dx = centered() * options.tileGapX * 0.25 * j
+  const dy = centered() * options.tileGapY * 0.25 * j
   const cx = gridCx + dx
   const cy = gridCy + dy
 
-  // Rotation jitter, up to ±12° added to base.
-  const rot = options.rotationDeg + centered() * 24 * j
+  // Rotation jitter, ±4° at j=0.5 — enough to feel hand-tiled, not chaotic.
+  const rot = options.rotationDeg + centered() * 8 * j
 
-  // Opacity jitter, multiplicative in [1 - 0.4j, 1 + 0.4j] clamped to [0.05, 1].
-  const opacityMul = 1 + centered() * 0.8 * j
+  // Opacity jitter, ±17.5% at j=0.5.
+  const opacityMul = 1 + centered() * 0.35 * j
   const opacity = Math.max(0.05, Math.min(1, options.opacity * opacityMul))
 
-  // Size jitter, multiplicative in [1 - 0.25j, 1 + 0.25j].
-  const sizeMul = 1 + centered() * 0.5 * j
+  // Size jitter, ±10% at j=0.5. Larger swings made big tiles clip the content
+  // and small tiles look like scratches; keeping this tight fixes both.
+  const sizeMul = 1 + centered() * 0.2 * j
   const size = Math.max(10, fontSize * sizeMul)
   const lh = size * 1.2
 
-  // Occasionally use a bolder or lighter weight variant via a random opacity band.
-  const shouldEmphasize = j > 0.1 && rng() < 0.12
-  const finalOpacity = shouldEmphasize ? Math.min(1, opacity * 1.7) : opacity
-
   ctx.save()
   ctx.font = `bold ${size}px Inter, system-ui, sans-serif`
-  ctx.fillStyle = colorBase(finalOpacity)
+  ctx.fillStyle = colorBase(opacity)
   drawBlock(ctx, lines, cx, cy, rot, lh, paint)
   ctx.restore()
 }

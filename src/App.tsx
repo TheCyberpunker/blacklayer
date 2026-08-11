@@ -621,11 +621,36 @@ export function App(): JSX.Element {
       const canvas = canvasRef.current
       if (!canvas) return null
       const rect = canvas.getBoundingClientRect()
-      const x = (clientX - rect.left) / rect.width
-      const y = (clientY - rect.top) / rect.height
+      // The <canvas> uses `object-contain`, so the internal buffer is fitted into
+      // the element bounds preserving aspect ratio. That leaves letterbox/pillarbox
+      // padding around the actual document image. Normalizing against the raw element
+      // rect (which we used to do) meant every click was offset by the padding, and
+      // the drawn rectangle landed somewhere the user did not click.
+      const bufW = canvas.width
+      const bufH = canvas.height
+      if (!bufW || !bufH) return null
+      const bufAspect = bufW / bufH
+      const elemAspect = rect.width / rect.height
+      let displayedW: number
+      let displayedH: number
+      let offsetX = 0
+      let offsetY = 0
+      if (bufAspect > elemAspect) {
+        // Buffer wider than element → letterboxed top and bottom.
+        displayedW = rect.width
+        displayedH = rect.width / bufAspect
+        offsetY = (rect.height - displayedH) / 2
+      } else {
+        // Buffer taller than element → pillarboxed left and right.
+        displayedH = rect.height
+        displayedW = rect.height * bufAspect
+        offsetX = (rect.width - displayedW) / 2
+      }
+      const localX = clientX - rect.left - offsetX
+      const localY = clientY - rect.top - offsetY
       return {
-        x: Math.max(0, Math.min(1, x)),
-        y: Math.max(0, Math.min(1, y)),
+        x: Math.max(0, Math.min(1, localX / displayedW)),
+        y: Math.max(0, Math.min(1, localY / displayedH)),
       }
     },
     [],
@@ -843,6 +868,7 @@ export function App(): JSX.Element {
             onClearAllPresets={onClearAllPresets}
             onDeleteAllLocalSettings={onDeleteAllLocalSettings}
             canSavePreset={!!recipient.trim() || !!purpose.trim()}
+            onOutputNameChange={setOutputName}
             customEnabled={customEnabled}
             customText={customText}
             onToggleCustom={() => {
@@ -1246,6 +1272,7 @@ interface WorkspaceProps {
   onClearAllPresets: () => void
   onDeleteAllLocalSettings: () => void
   canSavePreset: boolean
+  onOutputNameChange: (v: string) => void
   customEnabled: boolean
   customText: string
   onToggleCustom: () => void
@@ -1310,6 +1337,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     onClearAllPresets,
     onDeleteAllLocalSettings,
     canSavePreset,
+    onOutputNameChange,
     customEnabled,
     customText,
     onToggleCustom,
@@ -1567,7 +1595,17 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               </span>
             )}
           </div>
-          <div className="flex gap-2">
+          <RedactStylePicker
+            value={redactStyle}
+            onChange={onRedactStyleChange}
+            strings={strings}
+          />
+          {redactStyle !== 'solid' && (
+            <p className="text-[11px] text-muted-foreground/80">
+              {strings.workspace.redactModeHint}
+            </p>
+          )}
+          <div className="flex gap-2 pt-1">
             <Button
               variant={redactMode ? 'default' : 'outline'}
               size="sm"
@@ -1612,16 +1650,6 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           <p className="text-xs text-muted-foreground">
             {redactMode ? strings.workspace.redactHint : ''}
           </p>
-          <RedactStylePicker
-            value={redactStyle}
-            onChange={onRedactStyleChange}
-            strings={strings}
-          />
-          {redactStyle !== 'solid' && (
-            <p className="text-[11px] text-muted-foreground/80">
-              {strings.workspace.redactModeHint}
-            </p>
-          )}
           {isMultiPage && (
             <p className="text-[11px] text-muted-foreground/80 font-mono">
               {strings.workspace.redactPdfLimitation}
@@ -1702,13 +1730,25 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               <p className="text-sm font-semibold">{strings.result.ready}</p>
               <p className="text-xs text-muted-foreground mt-0.5">{strings.result.readySub}</p>
             </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="download-name">{strings.workspace.downloadNameLabel}</Label>
+              <Input
+                id="download-name"
+                value={outputName}
+                onChange={(e) => onOutputNameChange(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+                className="font-mono text-xs"
+              />
+              <p className="text-[11px] text-muted-foreground">{strings.workspace.downloadNameHint}</p>
+            </div>
             <a
               href={outputUrl}
-              download={outputName}
+              download={(outputName && outputName.trim()) || undefined}
               className={cn(
                 'inline-flex w-full items-center justify-center gap-2 h-10 px-4',
                 'rounded-md bg-primary text-primary-foreground text-sm font-medium',
-                'hover:bg-primary/90 transition-colors',
+                'hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
               )}
             >
               <Download className="h-4 w-4" />

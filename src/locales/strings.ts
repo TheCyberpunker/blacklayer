@@ -134,6 +134,8 @@ export interface Strings {
     batchTotalSize: (kb: string) => string
     batchNoRedactionNote: string
     batchCount: (n: number) => string
+    downloadNameLabel: string
+    downloadNameHint: string
   }
   result: {
     ready: string
@@ -249,8 +251,8 @@ export const enStrings: Strings = {
     metadataNoteRemoved: 'Hidden metadata will be removed.',
     signatureWarning:
       'This PDF appears to contain a digital signature. Creating a protected copy will invalidate the original signature on the copy.',
-    protect: 'Create protected copy',
-    working: 'Preparing your copy…',
+    protect: 'Protect and prepare download',
+    working: 'Preparing…',
     redactSectionTitle: 'Hide sensitive information',
     redactHint: 'Draw over anything you do not want the recipient to see. Hidden areas are permanently removed on download.',
     redactStart: 'Start hiding',
@@ -333,12 +335,14 @@ export const enStrings: Strings = {
     batchTotalSize: (kb) => `Total: ${kb} KB`,
     batchNoRedactionNote: 'Manual hiding is per-document and not available in batch mode. Protect files individually if you need to hide specific areas.',
     batchCount: (n) => `${n} file${n === 1 ? '' : 's'} ready`,
+    downloadNameLabel: 'File name',
+    downloadNameHint: 'You can rename the file before downloading it.',
   },
   result: {
     ready: 'Your protected copy is ready',
     readySub: 'Preview it above or download it now.',
-    download: 'Download protected copy',
-    protectAnother: 'Protect another document',
+    download: 'Download',
+    protectAnother: 'Protect another',
     originalNote: 'Your original document has not been changed.',
     appliedRecipient: 'Recipient included',
     appliedPurpose: 'Purpose included',
@@ -448,8 +452,8 @@ export const esStrings: Strings = {
     metadataNoteRemoved: 'Se eliminará la información oculta.',
     signatureWarning:
       'Este PDF parece contener una firma digital. Crear una copia protegida invalidará la firma original en la copia.',
-    protect: 'Crear copia protegida',
-    working: 'Preparando tu copia…',
+    protect: 'Proteger y preparar descarga',
+    working: 'Preparando…',
     redactSectionTitle: 'Ocultar información sensible',
     redactHint: 'Dibuja sobre lo que no quieres que vea el destinatario. Las zonas ocultas se eliminan de forma permanente al descargar.',
     redactStart: 'Empezar a ocultar',
@@ -532,12 +536,14 @@ export const esStrings: Strings = {
     batchTotalSize: (kb) => `Total: ${kb} KB`,
     batchNoRedactionNote: 'La ocultación manual se hace por documento y no está disponible en modo lote. Protege los archivos por separado si necesitas ocultar zonas específicas.',
     batchCount: (n) => `${n} archivo${n === 1 ? '' : 's'} listo${n === 1 ? '' : 's'}`,
+    downloadNameLabel: 'Nombre del archivo',
+    downloadNameHint: 'Puedes cambiar el nombre antes de descargar.',
   },
   result: {
     ready: 'Tu copia protegida está lista',
     readySub: 'Previsualízala arriba o descárgala ahora.',
-    download: 'Descargar copia protegida',
-    protectAnother: 'Proteger otro documento',
+    download: 'Descargar',
+    protectAnother: 'Proteger otro',
     originalNote: 'El documento original no ha sido modificado.',
     appliedRecipient: 'Destinatario incluido',
     appliedPurpose: 'Motivo incluido',
