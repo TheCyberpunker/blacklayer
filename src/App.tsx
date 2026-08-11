@@ -235,6 +235,14 @@ export function App(): JSX.Element {
     return n
   }, [redactionsByPage])
 
+  // Auto-switch the DNI/licence template side based on the active page so a
+  // combined front + back document lands the right rectangles automatically.
+  useEffect(() => {
+    if (!loaded || loaded.base.totalPages < 2) return
+    const wantSide = activePageIndex === 0 ? 'anverso' : 'reverso'
+    setTemplateSide((prev) => (prev === wantSide ? prev : wantSide))
+  }, [loaded, activePageIndex])
+
   // Load the active page on demand from the RenderedBase provider.
   useEffect(() => {
     if (!loaded) {
@@ -421,6 +429,42 @@ export function App(): JSX.Element {
     setBatchProgress(null)
     setError(null)
   }, [batchZipUrl])
+
+  const [combining, setCombining] = useState(false)
+
+  const combineBatchToPdf = useCallback(async () => {
+    if (!batch.length) return
+    if (batch.some((it) => it.kind !== 'image')) {
+      setError(t.workspace.batchCombineOnlyImages)
+      return
+    }
+    setError(null)
+    setCombining(true)
+    try {
+      const files = batch.map((it) => it.file)
+      const { combineImagesToPdf } = await import('./core/pdf/combine-images.ts')
+      const pdfBlob = await combineImagesToPdf(files)
+      const name = `${
+        files[0]?.name.replace(/\.[^.]+$/, '') ?? 'combined'
+      }-combined.pdf`
+      const combinedFile = new File([pdfBlob], name, {
+        type: 'application/pdf',
+        lastModified: Date.now(),
+      })
+      // Leave batch mode, feed the merged PDF back through onFiles so the
+      // normal single-file workflow (thumbnails, per-page redactions,
+      // per-page template) takes over.
+      clearBatch()
+      const dt = new DataTransfer()
+      dt.items.add(combinedFile)
+      await onFiles(dt.files)
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      setError(`${t.errors.failed}: ${msg}`)
+    } finally {
+      setCombining(false)
+    }
+  }, [batch, clearBatch, onFiles, t])
 
   const removeBatchItem = useCallback((id: string) => {
     setBatch((prev) => {
@@ -1266,6 +1310,9 @@ export function App(): JSX.Element {
             onAddMore={onFiles}
             onProtectAll={protectBatch}
             onBuildZip={buildZip}
+            onCombineToPdf={combineBatchToPdf}
+            combining={combining}
+            allImages={batch.length > 0 && batch.every((it) => it.kind === 'image')}
             recipient={recipient}
             purpose={purpose}
             level={level}
@@ -2705,6 +2752,9 @@ interface BatchWorkspaceProps {
   onAddMore: (list: FileList | null | undefined) => void
   onProtectAll: () => void
   onBuildZip: () => void
+  onCombineToPdf: () => void
+  combining: boolean
+  allImages: boolean
   recipient: string
   purpose: string
   level: ProtectionLevel
@@ -2736,6 +2786,9 @@ function BatchWorkspace(props: BatchWorkspaceProps): JSX.Element {
     onAddMore,
     onProtectAll,
     onBuildZip,
+    onCombineToPdf,
+    combining,
+    allImages,
     recipient,
     purpose,
     level,
@@ -2805,6 +2858,22 @@ function BatchWorkspace(props: BatchWorkspaceProps): JSX.Element {
             ))}
           </ul>
         </div>
+
+        {allImages && items.length >= 2 && (
+          <div className="mt-3 rounded-lg border border-border p-3 space-y-2">
+            <div className="flex items-center gap-2 text-sm">
+              <FileText className="h-4 w-4 text-muted-foreground" />
+              <span className="font-medium">{strings.workspace.batchCombineTitle}</span>
+            </div>
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {strings.workspace.batchCombineHint}
+            </p>
+            <Button variant="outline" size="sm" onClick={onCombineToPdf} disabled={combining}>
+              <FileText className="h-4 w-4" />
+              {combining ? strings.workspace.batchCombineWorking : strings.workspace.batchCombineButton}
+            </Button>
+          </div>
+        )}
 
         <p className="mt-3 text-xs text-muted-foreground">{strings.workspace.batchNoRedactionNote}</p>
         {errorCount > 0 && (

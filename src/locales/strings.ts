@@ -134,6 +134,11 @@ export interface Strings {
     batchTotalSize: (kb: string) => string
     batchNoRedactionNote: string
     batchCount: (n: number) => string
+    batchCombineTitle: string
+    batchCombineHint: string
+    batchCombineButton: string
+    batchCombineWorking: string
+    batchCombineOnlyImages: string
     downloadNameLabel: string
     downloadNameHint: string
     templateTitle: (docLabel: string) => string
@@ -372,6 +377,11 @@ export const enStrings: Strings = {
     batchTotalSize: (kb) => `Total: ${kb} KB`,
     batchNoRedactionNote: 'Manual hiding is per-document and not available in batch mode. Protect files individually if you need to hide specific areas.',
     batchCount: (n) => `${n} file${n === 1 ? '' : 's'} ready`,
+    batchCombineTitle: 'Combine into one PDF',
+    batchCombineHint: 'Merge the images into a single multi-page PDF (front + back of an ID, both sides of a card, etc.). Redactions, templates, and the watermark then apply per page.',
+    batchCombineButton: 'Combine into one PDF',
+    batchCombineWorking: 'Combining…',
+    batchCombineOnlyImages: 'Only image files can be combined. Remove any PDFs from the batch first.',
     downloadNameLabel: 'File name',
     downloadNameHint: 'You can rename the file before downloading it.',
     templateTitle: (docLabel) => `${docLabel} quick template`,
@@ -611,6 +621,11 @@ export const esStrings: Strings = {
     batchTotalSize: (kb) => `Total: ${kb} KB`,
     batchNoRedactionNote: 'La ocultación manual se hace por documento y no está disponible en modo lote. Protege los archivos por separado si necesitas ocultar zonas específicas.',
     batchCount: (n) => `${n} archivo${n === 1 ? '' : 's'} listo${n === 1 ? '' : 's'}`,
+    batchCombineTitle: 'Combinar en un solo PDF',
+    batchCombineHint: 'Une las imágenes en un PDF de varias páginas (anverso y reverso de un DNI, ambos lados de una tarjeta, etc.). Las zonas ocultas, las plantillas y la marca se aplican por página.',
+    batchCombineButton: 'Combinar en un PDF',
+    batchCombineWorking: 'Combinando…',
+    batchCombineOnlyImages: 'Solo se pueden combinar imágenes. Quita cualquier PDF del lote primero.',
     downloadNameLabel: 'Nombre del archivo',
     downloadNameHint: 'Puedes cambiar el nombre antes de descargar.',
     templateTitle: (docLabel) => `Plantilla rápida · ${docLabel}`,
