@@ -764,15 +764,29 @@ export function App(): JSX.Element {
   }, [clearPresets, setTheme, setLang, t, confirmAction, pushToast])
 
   const overrideDetection = useCallback((type: DocumentType) => {
-    setDetection((prev) => ({
-      ...prev,
-      type,
-      subtype: null,
-      country: prev.country,
-      confidence: 'medium',
-      manual: true,
-      reasons: ['manual override'],
-    }))
+    setDetection((prev) => {
+      // When overriding to identity or driving licence we assume Spain — those
+      // are the only ES-specific templates shipped. Passport template is
+      // country-agnostic. This keeps templateFor() strict without breaking the
+      // manual-override path.
+      const country =
+        type === 'identity' || type === 'driving_licence'
+          ? 'ES'
+          : type === 'passport'
+            ? prev.country === 'unknown'
+              ? 'other'
+              : prev.country
+            : prev.country
+      return {
+        ...prev,
+        type,
+        subtype: null,
+        country,
+        confidence: 'medium',
+        manual: true,
+        reasons: ['manual override'],
+      }
+    })
   }, [])
 
   const protect = useCallback(async () => {
@@ -1624,7 +1638,7 @@ export function App(): JSX.Element {
           onOpenPrivacy={() => setPrivacyOpen(true)}
         />
 
-        <main id="main" className="flex-1 w-full max-w-6xl mx-auto px-6 pt-6 pb-16">
+        <main id="main" className="flex-1 w-full max-w-6xl mx-auto px-6 pt-6 pb-24 lg:pb-16">
         {!loaded && !loading && batch.length === 0 && (
           <HeroDrop
             dragActive={dragActive}
@@ -1867,6 +1881,28 @@ export function App(): JSX.Element {
         </div>
       </footer>
 
+      {loaded && !loading && batch.length === 0 && (
+        <div
+          className="fixed inset-x-0 bottom-0 z-40 lg:hidden border-t border-border bg-background/95 backdrop-blur px-4 pt-3 pb-[calc(env(safe-area-inset-bottom)+0.75rem)] shadow-[0_-4px_16px_rgba(0,0,0,0.06)]"
+          role="region"
+          aria-label={t.workspace.protect}
+        >
+          {outputUrl ? (
+            <a
+              href={outputUrl}
+              download={(outputName && outputName.trim()) || undefined}
+              className="inline-flex w-full items-center justify-center gap-2 h-11 px-4 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
+            >
+              <Download className="h-4 w-4" />
+              {t.result.download}
+            </a>
+          ) : (
+            <Button onClick={protect} disabled={!canProtect} size="lg" className="w-full">
+              {working ? t.workspace.working : t.workspace.protect}
+            </Button>
+          )}
+        </div>
+      )}
       <HowItWorksDialog open={howOpen} onOpenChange={setHowOpen} strings={t} />
       <PrivacyDialog open={privacyOpen} onOpenChange={setPrivacyOpen} strings={t} />
       <ConfirmDialog
@@ -2637,6 +2673,30 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             </div>
           </div>
 
+          <RedactToolbar
+            redactMode={redactMode}
+            onToggleRedactMode={onToggleRedactMode}
+            redactStyle={redactStyle}
+            onRedactStyleChange={onRedactStyleChange}
+            redactSolidColor={redactSolidColor}
+            onRedactSolidColorChange={onRedactSolidColorChange}
+            onUndoRedaction={onUndoRedaction}
+            onClearRedactions={onClearRedactions}
+            activePageRedactionsCount={activePageRedactionsCount}
+            redactionsCount={redactionsCount}
+            selectedRectId={selectedRectId}
+            onDeleteSelectedRect={onDeleteSelectedRect}
+            isPdf={isPdf}
+            searchQuery={searchQuery}
+            onSearchQueryChange={onSearchQueryChange}
+            searching={searching}
+            searchSummary={searchSummary}
+            onRunSearch={onRunSearch}
+            onClearSearch={onClearSearch}
+            isMultiPage={isMultiPage}
+            strings={strings}
+          />
+
           <div className="relative w-full aspect-[3/4] sm:aspect-auto sm:min-h-[520px] bg-white rounded-lg overflow-hidden shadow-sm">
             <canvas
               ref={canvasRef}
@@ -2858,123 +2918,6 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           />
         )}
 
-        {/* Redaction */}
-        <section className="space-y-2 pt-4 border-t border-border/60" aria-label={strings.workspace.stepRedact}>
-          <div className="flex items-center justify-between">
-            <StepHeading step={3} title={strings.workspace.stepRedact} optional />
-            {redactionsCount > 0 && (
-              <span className="text-[11px] font-mono text-muted-foreground">
-                {strings.workspace.redactCount(redactionsCount)}
-              </span>
-            )}
-          </div>
-          <RedactStylePicker
-            value={redactStyle}
-            onChange={onRedactStyleChange}
-            strings={strings}
-          />
-          {redactStyle === 'solid' && (
-            <label className="flex items-center justify-between pt-1">
-              <span className="text-xs text-foreground">{strings.workspace.redactSolidColor}</span>
-              <span className="inline-flex items-center gap-2">
-                <input
-                  type="color"
-                  value={redactSolidColor}
-                  onChange={(e) => onRedactSolidColorChange(e.target.value)}
-                  aria-label={strings.workspace.redactSolidColor}
-                  className="h-6 w-9 rounded border border-input bg-background cursor-pointer"
-                />
-                <span className="font-mono text-[11px] text-muted-foreground uppercase">
-                  {redactSolidColor}
-                </span>
-              </span>
-            </label>
-          )}
-          {redactStyle !== 'solid' && (
-            <p className="text-[11px] text-muted-foreground/80">
-              {strings.workspace.redactModeHint}
-            </p>
-          )}
-          <div className="flex gap-2 pt-1">
-            <Button
-              variant={redactMode ? 'default' : 'outline'}
-              size="sm"
-              onClick={onToggleRedactMode}
-              className="flex-1"
-            >
-              {redactMode ? (
-                <>
-                  <Check className="h-4 w-4" />
-                  {strings.workspace.redactStop}
-                </>
-              ) : (
-                <>
-                  <Eraser className="h-4 w-4" />
-                  {strings.workspace.redactStart}
-                </>
-              )}
-            </Button>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onUndoRedaction}
-                  disabled={activePageRedactionsCount === 0}
-                  aria-label={strings.workspace.redactUndo}
-                >
-                  <Undo2 className="h-4 w-4" />
-                </Button>
-              </TooltipTrigger>
-              <TooltipContent>{strings.workspace.redactUndo}</TooltipContent>
-            </Tooltip>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClearRedactions}
-              disabled={redactionsCount === 0}
-            >
-              {strings.workspace.redactClear}
-            </Button>
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {redactMode ? strings.workspace.redactHint : ''}
-          </p>
-          {redactionsCount > 0 && (
-            <p className="text-[11px] text-muted-foreground/80">
-              {strings.workspace.selectionHint}
-            </p>
-          )}
-          {selectedRectId && (
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={onDeleteSelectedRect}
-              className="w-full"
-            >
-              <X className="h-4 w-4" />
-              {strings.workspace.deleteSelected}
-            </Button>
-          )}
-          {isMultiPage && (
-            <p className="text-[11px] text-muted-foreground/80 font-mono">
-              {strings.workspace.redactPdfLimitation}
-            </p>
-          )}
-
-          {isPdf && (
-            <TextSearchPanel
-              query={searchQuery}
-              onQueryChange={onSearchQueryChange}
-              searching={searching}
-              summary={searchSummary}
-              onRun={onRunSearch}
-              onClear={onClearSearch}
-              strings={strings}
-            />
-          )}
-        </section>
-
         {/* Advanced */}
         <section className="space-y-2 pt-4 border-t border-border/60">
           <button
@@ -2983,7 +2926,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             className="flex items-center justify-between w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
             aria-expanded={advancedOpen}
           >
-            <StepHeading step={4} title={strings.workspace.stepAdvanced} optional />
+            <StepHeading step={3} title={strings.workspace.stepAdvanced} optional />
             <ChevronDown
               className={cn(
                 'h-4 w-4 text-muted-foreground transition-transform',
@@ -3834,98 +3777,73 @@ function PresetBar({
 }): JSX.Element {
   const hasAny = presets.length > 0
   return (
-    <div className="space-y-2">
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-1.5 text-xs text-muted-foreground">
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        <button
+          type="button"
+          className="inline-flex items-center gap-1.5 text-xs px-2.5 h-8 rounded-md border border-border hover:border-foreground/40 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+        >
           <Bookmark className="h-3.5 w-3.5" />
           <span>{strings.workspace.presetsLabel}</span>
-        </div>
-        {hasAny && (
-          <button
-            type="button"
-            onClick={onClearAll}
-            className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
-          >
-            {strings.workspace.presetsClearAll}
-          </button>
-        )}
-      </div>
-      {hasAny ? (
-        <div className="flex flex-wrap gap-1.5">
-          {presets.map((p) => (
-            <PresetChip key={p.id} preset={p} onApply={onApply} onDelete={onDelete} strings={strings} />
-          ))}
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={!canSave}
-            className={cn(
-              'inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border border-dashed transition-colors',
-              canSave
-                ? 'border-border hover:border-foreground/50 text-muted-foreground hover:text-foreground'
-                : 'border-border/40 text-muted-foreground/50 cursor-not-allowed',
-            )}
-          >
-            <Plus className="h-3 w-3" />
-            {strings.workspace.presetsSave}
-          </button>
-        </div>
-      ) : (
-        <div className="flex items-center justify-between gap-3">
-          <p className="text-[11px] text-muted-foreground/80 flex-1">
+          {hasAny && (
+            <span className="font-mono text-[10px] text-muted-foreground/70">
+              {presets.length}
+            </span>
+          )}
+          <ChevronDown className="h-3.5 w-3.5" />
+        </button>
+      </DropdownMenuTrigger>
+      <DropdownMenuContent align="end" className="w-72">
+        {hasAny ? (
+          presets.map((p) => (
+            <div
+              key={p.id}
+              className="flex items-center gap-2 px-1 py-0.5 rounded hover:bg-accent"
+            >
+              <button
+                type="button"
+                onClick={() => onApply(p)}
+                className="flex-1 min-w-0 text-left px-2 py-1.5 text-xs rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                <span className="block truncate font-medium text-foreground">{p.name}</span>
+                <span className="block truncate text-[10px] text-muted-foreground">
+                  {p.recipient || p.purpose || strings.workspace.presetsEmptyHint}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => { e.stopPropagation(); onDelete(p.id) }}
+                aria-label={strings.workspace.presetsDeleteOne}
+                className="shrink-0 p-1 text-muted-foreground hover:text-destructive rounded"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
+          ))
+        ) : (
+          <p className="px-2 py-1.5 text-[11px] text-muted-foreground/80">
             {strings.workspace.presetsEmptyHint}
           </p>
-          <button
-            type="button"
-            onClick={onSave}
-            disabled={!canSave}
-            className={cn(
-              'shrink-0 inline-flex items-center gap-1 text-[11px] px-2 py-1 rounded-full border border-dashed transition-colors',
-              canSave
-                ? 'border-border hover:border-foreground/50 text-muted-foreground hover:text-foreground'
-                : 'border-border/40 text-muted-foreground/50 cursor-not-allowed',
-            )}
+        )}
+        <div className="my-1 h-px bg-border" />
+        <DropdownMenuItem
+          disabled={!canSave}
+          onSelect={(e) => { e.preventDefault(); if (canSave) onSave() }}
+        >
+          <Plus className="h-3.5 w-3.5" />
+          <span>{strings.workspace.presetsSave}</span>
+        </DropdownMenuItem>
+        {hasAny && (
+          <DropdownMenuItem
+            onSelect={(e) => { e.preventDefault(); onClearAll() }}
+            className="text-destructive"
           >
-            <Plus className="h-3 w-3" />
-            {strings.workspace.presetsSave}
-          </button>
-        </div>
-      )}
-    </div>
-  )
-}
-
-function PresetChip({
-  preset,
-  onApply,
-  onDelete,
-  strings,
-}: {
-  preset: Preset
-  onApply: (p: Preset) => void
-  onDelete: (id: string) => void
-  strings: Strings
-}): JSX.Element {
-  return (
-    <span className="group inline-flex items-center rounded-full border border-border bg-muted/30 pl-2.5 pr-1 py-0.5">
-      <button
-        type="button"
-        onClick={() => onApply(preset)}
-        className="text-[11px] font-medium text-foreground hover:text-foreground"
-        title={`${preset.recipient} · ${preset.purpose}`}
-      >
-        {preset.name}
-      </button>
-      <button
-        type="button"
-        onClick={() => onDelete(preset.id)}
-        aria-label={strings.workspace.presetsDeleteOne}
-        title={strings.workspace.presetsDeleteOne}
-        className="ml-1 h-4 w-4 rounded-full flex items-center justify-center text-muted-foreground hover:text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
-      >
-        <X className="h-3 w-3" />
-      </button>
-    </span>
+            <Trash2 className="h-3.5 w-3.5" />
+            <span>{strings.workspace.presetsClearAll}</span>
+          </DropdownMenuItem>
+        )}
+      </DropdownMenuContent>
+    </DropdownMenu>
   )
 }
 
@@ -3971,48 +3889,243 @@ function ComparePicker({
   )
 }
 
-function RedactStylePicker({
-  value,
-  onChange,
+function RedactToolbar({
+  redactMode,
+  onToggleRedactMode,
+  redactStyle,
+  onRedactStyleChange,
+  redactSolidColor,
+  onRedactSolidColorChange,
+  onUndoRedaction,
+  onClearRedactions,
+  activePageRedactionsCount,
+  redactionsCount,
+  selectedRectId,
+  onDeleteSelectedRect,
+  isPdf,
+  searchQuery,
+  onSearchQueryChange,
+  searching,
+  searchSummary,
+  onRunSearch,
+  onClearSearch,
+  isMultiPage,
   strings,
 }: {
-  value: RedactionMode
-  onChange: (m: RedactionMode) => void
+  redactMode: boolean
+  onToggleRedactMode: () => void
+  redactStyle: RedactionMode
+  onRedactStyleChange: (m: RedactionMode) => void
+  redactSolidColor: string
+  onRedactSolidColorChange: (v: string) => void
+  onUndoRedaction: () => void
+  onClearRedactions: () => void
+  activePageRedactionsCount: number
+  redactionsCount: number
+  selectedRectId: string | null
+  onDeleteSelectedRect: () => void
+  isPdf: boolean
+  searchQuery: string
+  onSearchQueryChange: (v: string) => void
+  searching: boolean
+  searchSummary: { matches: number; pages: number } | null
+  onRunSearch: () => void
+  onClearSearch: () => void
+  isMultiPage: boolean
   strings: Strings
 }): JSX.Element {
-  const labels: Record<RedactionMode, string> = {
+  const [searchOpen, setSearchOpen] = useState(false)
+  const styleLabels: Record<RedactionMode, string> = {
     solid: strings.workspace.redactModeSolid,
     blur: strings.workspace.redactModeBlur,
     pixelate: strings.workspace.redactModePixelate,
   }
+  const tooShort = searchQuery.trim().length > 0 && searchQuery.trim().length < 2
+
   return (
-    <div className="space-y-1.5 pt-1">
-      <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
-        {strings.workspace.redactModeLabel}
-      </span>
-      <div
-        role="radiogroup"
-        aria-label={strings.workspace.redactModeLabel}
-        className="grid grid-cols-3 gap-1 p-1 rounded-md bg-muted"
+    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-border bg-background/60 px-2 py-2">
+      <Button
+        variant={redactMode ? 'default' : 'outline'}
+        size="sm"
+        onClick={onToggleRedactMode}
       >
-        {REDACT_MODES.map((m) => {
-          const selected = m === value
-          return (
-            <button
-              key={m}
-              type="button"
-              role="radio"
-              aria-checked={selected}
-              onClick={() => onChange(m)}
-              className={cn(
-                'h-7 text-xs font-medium rounded transition-colors',
-                selected ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
-              )}
+        {redactMode ? (
+          <>
+            <Check className="h-4 w-4" />
+            {strings.workspace.redactStop}
+          </>
+        ) : (
+          <>
+            <Eraser className="h-4 w-4" />
+            {strings.workspace.redactStart}
+          </>
+        )}
+      </Button>
+
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button variant="outline" size="sm">
+            {styleLabels[redactStyle]}
+            <ChevronDown className="h-3.5 w-3.5" />
+          </Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start">
+          {REDACT_MODES.map((m) => (
+            <DropdownMenuItem key={m} onSelect={() => onRedactStyleChange(m)}>
+              {styleLabels[m]}
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuContent>
+      </DropdownMenu>
+
+      {redactStyle === 'solid' && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <label className="inline-flex items-center gap-1.5 h-9 px-2 rounded-md border border-input hover:border-foreground/40 cursor-pointer">
+              <input
+                type="color"
+                value={redactSolidColor}
+                onChange={(e) => onRedactSolidColorChange(e.target.value)}
+                aria-label={strings.workspace.redactSolidColor}
+                className="h-4 w-4 rounded border border-input bg-transparent cursor-pointer"
+              />
+              <span className="font-mono text-[10px] text-muted-foreground uppercase">
+                {redactSolidColor}
+              </span>
+            </label>
+          </TooltipTrigger>
+          <TooltipContent>{strings.workspace.redactSolidColor}</TooltipContent>
+        </Tooltip>
+      )}
+
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onUndoRedaction}
+            disabled={activePageRedactionsCount === 0}
+            aria-label={strings.workspace.redactUndo}
+          >
+            <Undo2 className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{strings.workspace.redactUndo}</TooltipContent>
+      </Tooltip>
+
+      {redactionsCount > 0 && (
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onClearRedactions}
+        >
+          {strings.workspace.redactClear}
+        </Button>
+      )}
+
+      {selectedRectId && (
+        <Button
+          variant="outline"
+          size="sm"
+          onClick={onDeleteSelectedRect}
+        >
+          <X className="h-4 w-4" />
+          {strings.workspace.deleteSelected}
+        </Button>
+      )}
+
+      {isPdf && (
+        <div className="relative">
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={searchOpen ? 'default' : 'ghost'}
+                size="icon"
+                onClick={() => setSearchOpen((v) => !v)}
+                aria-label={strings.workspace.searchTitle}
+                aria-expanded={searchOpen}
+              >
+                <Search className="h-4 w-4" />
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>{strings.workspace.searchTitle}</TooltipContent>
+          </Tooltip>
+          {searchOpen && (
+            <div
+              role="dialog"
+              aria-label={strings.workspace.searchTitle}
+              className="absolute left-0 top-full mt-2 z-30 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-popover text-popover-foreground p-3 space-y-2 shadow-lg animate-fade-in"
             >
-              {labels[m]}
-            </button>
-          )
-        })}
+              <div className="flex items-center gap-2 text-xs">
+                <Search className="h-3.5 w-3.5 text-muted-foreground" />
+                <span className="font-medium text-foreground">{strings.workspace.searchTitle}</span>
+              </div>
+              <div className="flex gap-2">
+                <Input
+                  type="search"
+                  value={searchQuery}
+                  onChange={(e) => onSearchQueryChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter' && !searching && !tooShort && searchQuery.trim()) {
+                      e.preventDefault()
+                      onRunSearch()
+                    }
+                  }}
+                  placeholder={strings.workspace.searchPlaceholder}
+                  autoComplete="off"
+                  maxLength={120}
+                  className="flex-1 h-9 text-xs"
+                />
+                <Button
+                  size="sm"
+                  variant="outline"
+                  onClick={onRunSearch}
+                  disabled={searching || tooShort || !searchQuery.trim()}
+                >
+                  {searching ? strings.workspace.searchWorking : strings.workspace.searchRun}
+                </Button>
+              </div>
+              {tooShort && (
+                <p className="text-[11px] text-muted-foreground/80">{strings.workspace.searchTooShort}</p>
+              )}
+              {searchSummary && (
+                <div className="flex items-center justify-between text-[11px]">
+                  <span className="text-muted-foreground font-mono">
+                    {searchSummary.matches > 0
+                      ? strings.workspace.searchResults(searchSummary.matches, searchSummary.pages)
+                      : strings.workspace.searchNoResults}
+                  </span>
+                  {searchSummary.matches > 0 && (
+                    <button
+                      type="button"
+                      onClick={onClearSearch}
+                      className="text-muted-foreground hover:text-destructive transition-colors"
+                    >
+                      {strings.workspace.searchClear}
+                    </button>
+                  )}
+                </div>
+              )}
+              <p className="text-[11px] text-muted-foreground/80">
+                {strings.workspace.searchLimitationsPdfOnly}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
+      <div className="ml-auto flex items-center gap-3 text-[11px] font-mono text-muted-foreground">
+        {redactMode && (
+          <span className="text-foreground/70">{strings.workspace.redactHint}</span>
+        )}
+        {redactionsCount > 0 && (
+          <span>{strings.workspace.redactCount(redactionsCount)}</span>
+        )}
+        {isMultiPage && redactMode && (
+          <span title={strings.workspace.redactPdfLimitation} className="text-muted-foreground/70">
+            {strings.workspace.redactPdfLimitation}
+          </span>
+        )}
       </div>
     </div>
   )
@@ -4068,81 +4181,6 @@ function AppliedItem({ children }: { children: React.ReactNode }): JSX.Element {
       <span className="mt-1 h-1 w-1 rounded-full bg-foreground/60 shrink-0" />
       <span>{children}</span>
     </li>
-  )
-}
-
-function TextSearchPanel({
-  query,
-  onQueryChange,
-  searching,
-  summary,
-  onRun,
-  onClear,
-  strings,
-}: {
-  query: string
-  onQueryChange: (v: string) => void
-  searching: boolean
-  summary: { matches: number; pages: number } | null
-  onRun: () => void
-  onClear: () => void
-  strings: Strings
-}): JSX.Element {
-  const tooShort = query.trim().length > 0 && query.trim().length < 2
-  return (
-    <div className="pt-3 mt-2 border-t border-border/60 space-y-2">
-      <div className="flex items-center gap-2 text-xs">
-        <Search className="h-3.5 w-3.5 text-muted-foreground" />
-        <span className="font-medium text-foreground">{strings.workspace.searchTitle}</span>
-      </div>
-      <div className="flex gap-2">
-        <Input
-          type="search"
-          value={query}
-          onChange={(e) => onQueryChange(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !searching && !tooShort && query.trim()) {
-              e.preventDefault()
-              onRun()
-            }
-          }}
-          placeholder={strings.workspace.searchPlaceholder}
-          autoComplete="off"
-          maxLength={120}
-          className="flex-1 h-9 text-xs"
-        />
-        <Button
-          size="sm"
-          variant="outline"
-          onClick={onRun}
-          disabled={searching || tooShort || !query.trim()}
-        >
-          {searching ? strings.workspace.searchWorking : strings.workspace.searchRun}
-        </Button>
-      </div>
-      {tooShort && (
-        <p className="text-[11px] text-muted-foreground/80">{strings.workspace.searchTooShort}</p>
-      )}
-      {summary && (
-        <div className="flex items-center justify-between text-[11px]">
-          <span className="text-muted-foreground font-mono">
-            {summary.matches > 0
-              ? strings.workspace.searchResults(summary.matches, summary.pages)
-              : strings.workspace.searchNoResults}
-          </span>
-          {summary.matches > 0 && (
-            <button
-              type="button"
-              onClick={onClear}
-              className="text-muted-foreground hover:text-destructive transition-colors"
-            >
-              {strings.workspace.searchClear}
-            </button>
-          )}
-        </div>
-      )}
-      <p className="text-[11px] text-muted-foreground/80">{strings.workspace.searchLimitationsPdfOnly}</p>
-    </div>
   )
 }
 

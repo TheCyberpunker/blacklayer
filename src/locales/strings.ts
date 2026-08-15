@@ -30,20 +30,13 @@ export interface Strings {
     subtitle: string
     dropTitle: string
     dropSub: string
-    choose: string
     supported: string
     privacy: string
-    multiHint: string
   }
   workspace: {
-    documentLabel: string
-    documentKindPdf: string
-    documentKindImage: string
     pageCount: (n: number) => string
     fileSize: (kb: string) => string
     clear: string
-    protectionTitle: string
-    protectionHelper: string
     stepAbout: string
     stepProtection: string
     stepRedact: string
@@ -80,7 +73,6 @@ export interface Strings {
     compareSlider: string
     compareOriginal: string
     pageStripLabel: string
-    pageStripCapped: (rendered: number, total: number) => string
     pageStripCurrent: (current: number, total: number) => string
     detected: (label: string) => string
     detectedLow: string
@@ -91,14 +83,11 @@ export interface Strings {
     detectionSubtypeTie: string
     detectionSubtypePassport: string
     detectionSubtypeDrivingLicence: string
-    changeDetection: string
     recommendedFor: (docLabel: string) => string
     applyRecommended: string
-    purposeSuggestionsLabel: string
     customizeText: string
     customTextLabel: string
     customTextHint: string
-    advancedTitle: string
     patternCrosshatchLabel: string
     patternCrosshatchHint: string
     patternFrameLabel: string
@@ -173,9 +162,7 @@ export interface Strings {
     searchResults: (matches: number, pages: number) => string
     searchClear: string
     searchLimitationsPdfOnly: string
-    searchNotPdf: string
     searchTooShort: string
-    adjustLabel: string
     adjustRotateLeft: string
     adjustRotateRight: string
     adjustGrayscale: string
@@ -183,7 +170,6 @@ export interface Strings {
     adjustCropHint: string
     adjustCropApply: string
     adjustCropCancel: string
-    adjustCropTooSmall: string
     adjustConfirmClearRedactions: string
     adjustTuneToggle: string
     adjustBrightness: string
@@ -219,7 +205,6 @@ export interface Strings {
     ready: string
     readySub: string
     download: string
-    protectAnother: string
     originalNote: string
     appliedRecipient: string
     appliedPurpose: string
@@ -295,20 +280,13 @@ export const enStrings: Strings = {
     subtitle: 'Add personalized protection to identity documents, contracts, PDFs and images.',
     dropTitle: 'Drop a document here',
     dropSub: 'or click to choose one',
-    choose: 'Choose document',
     supported: 'PDF, JPG, PNG and WebP',
     privacy: 'Your documents never leave this device.',
-    multiHint: 'Drop both sides of an ID together to combine them into one document.',
   },
   workspace: {
-    documentLabel: 'Document',
-    documentKindPdf: 'PDF',
-    documentKindImage: 'Image',
     pageCount: (n) => `${n} page${n === 1 ? '' : 's'}`,
     fileSize: (kb) => `${kb} KB`,
     clear: 'Clear document',
-    protectionTitle: 'Prepare your protected copy',
-    protectionHelper: 'Tell us who this copy is for and why. Preview updates as you type.',
     stepAbout: 'About this copy',
     stepProtection: 'Protection level',
     stepRedact: 'Hide sensitive information',
@@ -350,7 +328,6 @@ export const enStrings: Strings = {
     compareSlider: 'Compare',
     compareOriginal: 'Original',
     pageStripLabel: 'Pages',
-    pageStripCapped: (rendered, total) => `Showing first ${rendered} of ${total} pages`,
     pageStripCurrent: (current, total) => `Page ${current} of ${total}`,
     detected: (label) => `${label} detected`,
     detectedLow: 'This may be an identity document. Please confirm.',
@@ -370,14 +347,11 @@ export const enStrings: Strings = {
     detectionSubtypeTie: 'Spanish TIE',
     detectionSubtypePassport: 'Passport',
     detectionSubtypeDrivingLicence: 'Driving licence',
-    changeDetection: 'Change type',
     recommendedFor: (docLabel) => `Recommended for ${docLabel.toLowerCase()}`,
     applyRecommended: 'Apply recommended',
-    purposeSuggestionsLabel: 'Suggestions',
     customizeText: 'Customize watermark text',
     customTextLabel: 'Watermark text',
     customTextHint: 'One line per row. Leave empty to use the default recipient + purpose text.',
-    advancedTitle: 'Advanced',
     patternCrosshatchLabel: 'Add crosshatch security pattern',
     patternCrosshatchHint: 'Thin diagonal lines across the whole page. Makes automated watermark removal harder.',
     patternFrameLabel: 'Add border frame',
@@ -453,9 +427,7 @@ export const enStrings: Strings = {
       `${matches} match${matches === 1 ? '' : 'es'} on ${pages} page${pages === 1 ? '' : 's'}`,
     searchClear: 'Clear search hides',
     searchLimitationsPdfOnly: 'Text search works on PDFs with embedded text. Scanned image PDFs need OCR (on the roadmap).',
-    searchNotPdf: 'Text search is only available for PDF files.',
     searchTooShort: 'Type at least 2 characters.',
-    adjustLabel: 'Adjust image',
     adjustRotateLeft: 'Rotate left',
     adjustRotateRight: 'Rotate right',
     adjustGrayscale: 'Black & white',
@@ -463,7 +435,6 @@ export const enStrings: Strings = {
     adjustCropHint: 'Drag on the image to select the area to keep.',
     adjustCropApply: 'Apply crop',
     adjustCropCancel: 'Cancel',
-    adjustCropTooSmall: 'Selection is too small.',
     adjustConfirmClearRedactions: 'This adjustment will clear the redactions you drew. Continue?',
     adjustTuneToggle: 'Brightness & contrast',
     adjustBrightness: 'Brightness',
@@ -503,7 +474,6 @@ export const enStrings: Strings = {
     ready: 'Your protected copy is ready',
     readySub: 'Preview it above or download it now.',
     download: 'Download',
-    protectAnother: 'Protect another',
     originalNote: 'Your original document has not been changed.',
     appliedRecipient: 'Recipient included',
     appliedPurpose: 'Purpose included',
@@ -579,20 +549,13 @@ export const esStrings: Strings = {
     subtitle: 'Añade una protección personalizada a documentos de identidad, contratos, PDFs e imágenes.',
     dropTitle: 'Arrastra un documento aquí',
     dropSub: 'o haz clic para seleccionar uno',
-    choose: 'Seleccionar documento',
     supported: 'PDF, JPG, PNG y WebP',
     privacy: 'Tus documentos nunca salen de este dispositivo.',
-    multiHint: 'Arrastra ambas caras de un documento a la vez para combinarlas en un solo archivo.',
   },
   workspace: {
-    documentLabel: 'Documento',
-    documentKindPdf: 'PDF',
-    documentKindImage: 'Imagen',
     pageCount: (n) => `${n} página${n === 1 ? '' : 's'}`,
     fileSize: (kb) => `${kb} KB`,
     clear: 'Descartar documento',
-    protectionTitle: 'Prepara tu copia protegida',
-    protectionHelper: 'Indícanos para quién es esta copia y para qué. La vista previa se actualiza mientras escribes.',
     stepAbout: 'Sobre esta copia',
     stepProtection: 'Nivel de protección',
     stepRedact: 'Ocultar información sensible',
@@ -634,7 +597,6 @@ export const esStrings: Strings = {
     compareSlider: 'Comparar',
     compareOriginal: 'Original',
     pageStripLabel: 'Páginas',
-    pageStripCapped: (rendered, total) => `Mostrando las primeras ${rendered} de ${total} páginas`,
     pageStripCurrent: (current, total) => `Página ${current} de ${total}`,
     detected: (label) => `${label} detectado`,
     detectedLow: 'Podría ser un documento de identidad. Confírmalo por favor.',
@@ -654,14 +616,11 @@ export const esStrings: Strings = {
     detectionSubtypeTie: 'TIE',
     detectionSubtypePassport: 'Pasaporte',
     detectionSubtypeDrivingLicence: 'Permiso de conducir',
-    changeDetection: 'Cambiar tipo',
     recommendedFor: (docLabel) => `Recomendado para ${docLabel.toLowerCase()}`,
     applyRecommended: 'Aplicar recomendación',
-    purposeSuggestionsLabel: 'Sugerencias',
     customizeText: 'Personalizar texto de la marca',
     customTextLabel: 'Texto de la marca',
     customTextHint: 'Una línea por renglón. Deja vacío para usar destinatario y motivo por defecto.',
-    advancedTitle: 'Avanzado',
     patternCrosshatchLabel: 'Añadir patrón de seguridad de trama',
     patternCrosshatchHint: 'Líneas diagonales finas sobre toda la página. Dificulta la eliminación automática de la marca.',
     patternFrameLabel: 'Añadir marco',
@@ -737,9 +696,7 @@ export const esStrings: Strings = {
       `${matches} coincidencia${matches === 1 ? '' : 's'} en ${pages} página${pages === 1 ? '' : 's'}`,
     searchClear: 'Vaciar búsquedas ocultas',
     searchLimitationsPdfOnly: 'La búsqueda funciona con PDFs con texto incrustado. Los PDFs escaneados necesitan OCR (en la hoja de ruta).',
-    searchNotPdf: 'La búsqueda solo está disponible para PDFs.',
     searchTooShort: 'Escribe al menos 2 caracteres.',
-    adjustLabel: 'Ajustar imagen',
     adjustRotateLeft: 'Girar a la izquierda',
     adjustRotateRight: 'Girar a la derecha',
     adjustGrayscale: 'Blanco y negro',
@@ -747,7 +704,6 @@ export const esStrings: Strings = {
     adjustCropHint: 'Arrastra sobre la imagen para seleccionar la zona a mantener.',
     adjustCropApply: 'Aplicar recorte',
     adjustCropCancel: 'Cancelar',
-    adjustCropTooSmall: 'La selección es demasiado pequeña.',
     adjustConfirmClearRedactions: 'Este ajuste eliminará las zonas que hayas ocultado. ¿Continuar?',
     adjustTuneToggle: 'Brillo y contraste',
     adjustBrightness: 'Brillo',
@@ -787,7 +743,6 @@ export const esStrings: Strings = {
     ready: 'Tu copia protegida está lista',
     readySub: 'Previsualízala arriba o descárgala ahora.',
     download: 'Descargar',
-    protectAnother: 'Proteger otro',
     originalNote: 'El documento original no ha sido modificado.',
     appliedRecipient: 'Destinatario incluido',
     appliedPurpose: 'Motivo incluido',
