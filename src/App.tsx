@@ -378,9 +378,12 @@ export function App(): JSX.Element {
     }
   }, [loaded, activePageIndex])
 
-  // Live redraw of the composite (protected view).
+  // Live redraw of the composite (protected view). Depends only on activePage,
+  // not on `loaded`, so a fresh base swap does not force a redraw with the old
+  // activePage bitmap while the new page is still loading (which would resize
+  // the canvas twice and look like a flash on rotate/crop).
   useEffect(() => {
-    if (!loaded || !activePage || !canvasRef.current) return
+    if (!activePage || !canvasRef.current) return
     composite({
       target: canvasRef.current,
       page: activePage,
@@ -391,7 +394,7 @@ export function App(): JSX.Element {
       selectedRectId,
       highlightRectIds: highlightedRectIds,
     })
-  }, [loaded, activePage, previewProfile, lang, activePageRedactions, activeRect, selectedRectId, highlightedRectIds])
+  }, [activePage, previewProfile, lang, activePageRedactions, activeRect, selectedRectId, highlightedRectIds])
 
   // Draw the untouched original into the overlay canvas whenever compare mode
   // shows it or the active page changes.
@@ -415,7 +418,12 @@ export function App(): JSX.Element {
   // adjustment flags — those are the responsibility of the caller.
   const loadFileIntoState = useCallback(
     async (f: File, kind: 'pdf' | 'image', resetAdjustmentDependent: boolean) => {
-      setLoading(true)
+      // Only show the full "Loading document…" spinner on a fresh load. Image
+      // adjustments (rotate, grayscale, brightness/contrast, crop) pass
+      // resetAdjustmentDependent=false and stay mounted so the preview does
+      // not appear to "refresh" on every button press.
+      const isFreshLoad = resetAdjustmentDependent
+      if (isFreshLoad) setLoading(true)
       try {
         const { renderBase } = await import('./core/preview/render.ts')
         const base = await renderBase(f)
@@ -468,7 +476,7 @@ export function App(): JSX.Element {
         const msg = err instanceof Error ? err.message : String(err)
         setError(`${t.errors.failed}: ${msg}`)
       } finally {
-        setLoading(false)
+        if (isFreshLoad) setLoading(false)
       }
     },
     [t],
@@ -2639,7 +2647,10 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               className={cn(
                 'absolute inset-0 w-full h-full object-contain touch-none select-none transition-opacity',
                 (redactMode || cropMode) && compareMode === 'protected' ? 'cursor-crosshair' : '',
-                pageLoading ? 'opacity-50' : 'opacity-100',
+                // During image adjustments the canvas is redrawn imperceptibly
+                // fast; dimming it would look like a jarring flash. Only dim
+                // for real cross-page loads.
+                pageLoading && !adjusting ? 'opacity-50' : 'opacity-100',
               )}
               style={{
                 visibility: compareMode === 'original' ? 'hidden' : 'visible',
@@ -2682,7 +2693,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                 {strings.workspace.adjustCropHint}
               </div>
             )}
-            {pageLoading && (
+            {pageLoading && !adjusting && (
               <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
                 <div className="rounded-full bg-black/70 text-white text-[11px] font-mono uppercase tracking-wider px-3 py-1.5 animate-pulse">
                   loading page {activePageIndex + 1}…
