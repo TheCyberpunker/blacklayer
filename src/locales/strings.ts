@@ -196,6 +196,24 @@ export interface Strings {
     addAnotherPromptAction: string
     selectionHint: string
     deleteSelected: string
+    commonConfirm: string
+    commonCancel: string
+    commonDelete: string
+    commonContinue: string
+    presetsSaveTitle: string
+    presetsSaveInputLabel: string
+    presetsClearAllTitle: string
+    deleteLocalSettingsTitle: string
+    adjustClearRedactionsTitle: string
+    addAnotherClearTitle: string
+    batchClearAllTitle: string
+    toastPresetSaved: (name: string) => string
+    toastPresetApplied: (name: string) => string
+    toastPresetDeleted: string
+    toastPresetsCleared: string
+    toastLocalSettingsCleared: string
+    toastSearchDone: (matches: number, pages: number) => string
+    toastRedactionsCleared: string
   }
   result: {
     ready: string
@@ -459,6 +477,27 @@ export const enStrings: Strings = {
     addAnotherPromptDismiss: 'No, continue',
     selectionHint: 'Click a hidden area to move or resize it. Delete removes it, Esc deselects.',
     deleteSelected: 'Delete selected',
+    commonConfirm: 'Confirm',
+    commonCancel: 'Cancel',
+    commonDelete: 'Delete',
+    commonContinue: 'Continue',
+    presetsSaveTitle: 'Save preset',
+    presetsSaveInputLabel: 'Preset name',
+    presetsClearAllTitle: 'Delete all presets?',
+    deleteLocalSettingsTitle: 'Clear all local settings?',
+    adjustClearRedactionsTitle: 'Clear hidden regions?',
+    addAnotherClearTitle: 'Add a second photo?',
+    batchClearAllTitle: 'Clear this batch?',
+    toastPresetSaved: (name) => `Preset "${name}" saved`,
+    toastPresetApplied: (name) => `Preset "${name}" applied`,
+    toastPresetDeleted: 'Preset removed',
+    toastPresetsCleared: 'All presets removed',
+    toastLocalSettingsCleared: 'Local settings cleared',
+    toastSearchDone: (matches, pages) =>
+      matches === 0
+        ? 'No matches found'
+        : `${matches} match${matches === 1 ? '' : 'es'} hidden across ${pages} page${pages === 1 ? '' : 's'}`,
+    toastRedactionsCleared: 'Hidden regions cleared',
   },
   result: {
     ready: 'Your protected copy is ready',
@@ -722,6 +761,27 @@ export const esStrings: Strings = {
     addAnotherPromptDismiss: 'No, continuar',
     selectionHint: 'Toca una zona oculta para moverla o cambiar su tamaño. Supr la elimina, Esc deselecciona.',
     deleteSelected: 'Eliminar selección',
+    commonConfirm: 'Confirmar',
+    commonCancel: 'Cancelar',
+    commonDelete: 'Eliminar',
+    commonContinue: 'Continuar',
+    presetsSaveTitle: 'Guardar preajuste',
+    presetsSaveInputLabel: 'Nombre del preajuste',
+    presetsClearAllTitle: '¿Eliminar todos los preajustes?',
+    deleteLocalSettingsTitle: '¿Borrar todos los ajustes locales?',
+    adjustClearRedactionsTitle: '¿Borrar las zonas ocultas?',
+    addAnotherClearTitle: '¿Añadir una segunda foto?',
+    batchClearAllTitle: '¿Vaciar este lote?',
+    toastPresetSaved: (name) => `Preajuste "${name}" guardado`,
+    toastPresetApplied: (name) => `Preajuste "${name}" aplicado`,
+    toastPresetDeleted: 'Preajuste eliminado',
+    toastPresetsCleared: 'Todos los preajustes eliminados',
+    toastLocalSettingsCleared: 'Ajustes locales borrados',
+    toastSearchDone: (matches, pages) =>
+      matches === 0
+        ? 'Sin coincidencias'
+        : `${matches} coincidencia${matches === 1 ? '' : 's'} ocultada${matches === 1 ? '' : 's'} en ${pages} página${pages === 1 ? '' : 's'}`,
+    toastRedactionsCleared: 'Zonas ocultas eliminadas',
   },
   result: {
     ready: 'Tu copia protegida está lista',

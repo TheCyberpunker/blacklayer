@@ -54,6 +54,14 @@ import {
   DialogTitle,
 } from './components/ui/dialog.tsx'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './components/ui/tooltip.tsx'
+import {
+  ConfirmDialog,
+  PromptDialog,
+  ToastRegion,
+  type ConfirmOptions,
+  type PromptOptions,
+  type Toast,
+} from './components/ui/notifications.tsx'
 import { useTheme, type Theme } from './hooks/use-theme.ts'
 import { useLang } from './hooks/use-lang.ts'
 import { useDebounced } from './hooks/use-debounced.ts'
@@ -229,6 +237,7 @@ export function App(): JSX.Element {
   // stays until the user either adds a photo or dismisses it. Reset on drop.
   const [addAnotherPromptOpen, setAddAnotherPromptOpen] = useState(false)
   const [selectedRectId, setSelectedRectId] = useState<string | null>(null)
+  const [highlightedRectIds, setHighlightedRectIds] = useState<ReadonlySet<string>>(() => new Set())
   // Drag interaction on the preview canvas has four possible modes: creating a
   // new redaction rect, moving an existing one, resizing an existing one via
   // its bottom-right handle, or drawing a crop selection. Only one at a time.
@@ -246,6 +255,54 @@ export function App(): JSX.Element {
   const [error, setError] = useState<string | null>(null)
   const [outputUrl, setOutputUrl] = useState<string | null>(null)
   const [outputName, setOutputName] = useState<string>('')
+
+  // Toast + confirm + prompt infrastructure. Replaces the previous window.confirm
+  // and window.prompt calls, which broke the design system and had no way to
+  // signal success afterwards.
+  const [toasts, setToasts] = useState<readonly Toast[]>([])
+  const [confirmState, setConfirmState] = useState<
+    | (ConfirmOptions & { open: boolean; resolve: (ok: boolean) => void })
+    | null
+  >(null)
+  const [promptState, setPromptState] = useState<
+    | (PromptOptions & { open: boolean; resolve: (v: string | null) => void })
+    | null
+  >(null)
+
+  const pushToast = useCallback((message: string, tone: 'default' | 'destructive' = 'default') => {
+    const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+      ? crypto.randomUUID()
+      : `${Date.now()}-${Math.floor(Math.random() * 1e9)}`
+    setToasts((prev) => [...prev, { id, message, tone }])
+    window.setTimeout(() => setToasts((prev) => prev.filter((x) => x.id !== id)), 3200)
+  }, [])
+  const dismissToast = useCallback((id: string) => {
+    setToasts((prev) => prev.filter((x) => x.id !== id))
+  }, [])
+
+  const confirmAction = useCallback((opts: ConfirmOptions): Promise<boolean> => {
+    return new Promise<boolean>((resolve) => {
+      setConfirmState({ ...opts, open: true, resolve })
+    })
+  }, [])
+  const handleConfirmResult = useCallback((ok: boolean) => {
+    setConfirmState((prev) => {
+      prev?.resolve(ok)
+      return null
+    })
+  }, [])
+
+  const promptText = useCallback((opts: PromptOptions): Promise<string | null> => {
+    return new Promise<string | null>((resolve) => {
+      setPromptState({ ...opts, open: true, resolve })
+    })
+  }, [])
+  const handlePromptResult = useCallback((v: string | null) => {
+    setPromptState((prev) => {
+      prev?.resolve(v)
+      return null
+    })
+  }, [])
 
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const originalCanvasRef = useRef<HTMLCanvasElement>(null)
@@ -332,8 +389,9 @@ export function App(): JSX.Element {
       redactions: activePageRedactions,
       activeRect,
       selectedRectId,
+      highlightRectIds: highlightedRectIds,
     })
-  }, [loaded, activePage, previewProfile, lang, activePageRedactions, activeRect, selectedRectId])
+  }, [loaded, activePage, previewProfile, lang, activePageRedactions, activeRect, selectedRectId, highlightedRectIds])
 
   // Draw the untouched original into the overlay canvas whenever compare mode
   // shows it or the active page changes.
@@ -615,17 +673,26 @@ export function App(): JSX.Element {
     setRotationOverride(p.rotationDeg)
     setFontSizeOverride(p.fontSize)
     setColorOverride(p.colorHex)
-  }, [])
+    pushToast(t.workspace.toastPresetApplied(p.name))
+  }, [pushToast, t])
 
-  const onSaveCurrentPreset = useCallback(() => {
+  const onSaveCurrentPreset = useCallback(async () => {
     const rec = recipient.trim()
     const pur = purpose.trim()
     if (!rec && !pur) return
     const defaultName = rec || pur || t.workspace.presetsSavePromptDefault
-    const name = window.prompt(t.workspace.presetsSavePromptTitle, defaultName)
-    if (!name || !name.trim()) return
-    savePreset({
-      name: name.trim(),
+    const name = await promptText({
+      title: t.workspace.presetsSaveTitle,
+      body: t.workspace.presetsSavePromptTitle,
+      inputLabel: t.workspace.presetsSaveInputLabel,
+      defaultValue: defaultName,
+      placeholder: defaultName,
+      confirmLabel: t.workspace.presetsSave,
+      cancelLabel: t.workspace.commonCancel,
+    })
+    if (!name) return
+    const saved = savePreset({
+      name,
       recipient: rec,
       purpose: pur,
       level,
@@ -638,6 +705,7 @@ export function App(): JSX.Element {
       fontSize: fontSizeOverride,
       colorHex: colorOverride,
     })
+    if (saved) pushToast(t.workspace.toastPresetSaved(saved.name))
   }, [
     recipient,
     purpose,
@@ -651,23 +719,41 @@ export function App(): JSX.Element {
     fontSizeOverride,
     colorOverride,
     savePreset,
+    promptText,
+    pushToast,
     t,
   ])
 
-  const onClearAllPresets = useCallback(() => {
+  const onClearAllPresets = useCallback(async () => {
     if (!presets.length) return
-    if (!window.confirm(t.workspace.presetsClearAllConfirm)) return
+    const ok = await confirmAction({
+      title: t.workspace.presetsClearAllTitle,
+      body: t.workspace.presetsClearAllConfirm,
+      confirmLabel: t.workspace.commonDelete,
+      cancelLabel: t.workspace.commonCancel,
+      destructive: true,
+    })
+    if (!ok) return
     clearPresets()
-  }, [presets.length, clearPresets, t])
+    pushToast(t.workspace.toastPresetsCleared)
+  }, [presets.length, clearPresets, t, confirmAction, pushToast])
 
-  const onDeleteAllLocalSettings = useCallback(() => {
-    if (!window.confirm(t.workspace.deleteLocalSettingsConfirm)) return
+  const onDeleteAllLocalSettings = useCallback(async () => {
+    const ok = await confirmAction({
+      title: t.workspace.deleteLocalSettingsTitle,
+      body: t.workspace.deleteLocalSettingsConfirm,
+      confirmLabel: t.workspace.commonDelete,
+      cancelLabel: t.workspace.commonCancel,
+      destructive: true,
+    })
+    if (!ok) return
     clearAllLocalSettings()
     clearPresets()
     // Restore in-memory defaults so the running session looks reset too.
     setTheme('system')
     setLang(navigator.language?.toLowerCase().startsWith('es') ? 'es' : 'en')
-  }, [clearPresets, setTheme, setLang, t])
+    pushToast(t.workspace.toastLocalSettingsCleared)
+  }, [clearPresets, setTheme, setLang, t, confirmAction, pushToast])
 
   const overrideDetection = useCallback((type: DocumentType) => {
     setDetection((prev) => ({
@@ -1245,14 +1331,32 @@ export function App(): JSX.Element {
         return next
       })
 
-      const pagesTouched = new Set(matches.map((m) => m.pageIndex)).size
+      const touchedPages = matches.map((m) => m.pageIndex)
+      const pagesTouched = new Set(touchedPages).size
       setSearchSummary({ matches: matches.length, pages: pagesTouched })
+      pushToast(t.workspace.toastSearchDone(matches.length, pagesTouched))
+
+      // Highlight the newly added search rects for a few seconds and, if the
+      // user is on a page with no matches, jump to the first matched page so
+      // they can immediately see the result.
+      if (matches.length) {
+        const newIds = new Set(matches.map((_, i) => `search:${i}:${matches[i]!.pageIndex}`))
+        setHighlightedRectIds(newIds)
+        const firstPage = Math.min(...touchedPages)
+        if (!touchedPages.includes(activePageIndex)) {
+          setActivePageIndex(firstPage)
+          setActiveRect(null)
+        }
+        window.setTimeout(() => setHighlightedRectIds(new Set()), 2000)
+      } else {
+        setHighlightedRectIds(new Set())
+      }
     } catch {
       setSearchSummary({ matches: 0, pages: 0 })
     } finally {
       setSearching(false)
     }
-  }, [loaded, searchQuery, redactStyle, redactSolidColor])
+  }, [loaded, searchQuery, redactStyle, redactSolidColor, activePageIndex, pushToast, t])
 
   const clearSearchRedactions = useCallback(() => {
     setRedactionsByPage((prev) => {
@@ -1291,7 +1395,14 @@ export function App(): JSX.Element {
     if (cropRect.w < MIN_RECT * 2 || cropRect.h < MIN_RECT * 2) return
     // Warn if there are redactions; crop baked-in changes normalized coords.
     if (anyRedactions) {
-      if (!window.confirm(t.workspace.adjustConfirmClearRedactions)) return
+      const ok = await confirmAction({
+        title: t.workspace.adjustClearRedactionsTitle,
+        body: t.workspace.adjustConfirmClearRedactions,
+        confirmLabel: t.workspace.commonContinue,
+        cancelLabel: t.workspace.commonCancel,
+        destructive: true,
+      })
+      if (!ok) return
     }
     setAdjusting(true)
     try {
@@ -1310,7 +1421,7 @@ export function App(): JSX.Element {
     } finally {
       setAdjusting(false)
     }
-  }, [cropMode, cropRect, loaded, anyRedactions, t, loadFileIntoState])
+  }, [cropMode, cropRect, loaded, anyRedactions, t, loadFileIntoState, confirmAction])
 
   // Single derivation helper: takes the target flag values, always applies them
   // to the immutable originalImageFile, and reloads. Used by rotate, grayscale,
@@ -1407,13 +1518,20 @@ export function App(): JSX.Element {
   // the normal single-file loader.
   const addAnotherPhotoInputRef = useRef<HTMLInputElement>(null)
 
-  const requestAddAnotherPhoto = useCallback(() => {
+  const requestAddAnotherPhoto = useCallback(async () => {
     if (!loaded || loaded.kind !== 'image') return
     if (anyRedactions) {
-      if (!window.confirm(t.workspace.addAnotherPhotoConfirmClear)) return
+      const ok = await confirmAction({
+        title: t.workspace.addAnotherClearTitle,
+        body: t.workspace.addAnotherPhotoConfirmClear,
+        confirmLabel: t.workspace.commonContinue,
+        cancelLabel: t.workspace.commonCancel,
+        destructive: true,
+      })
+      if (!ok) return
     }
     addAnotherPhotoInputRef.current?.click()
-  }, [loaded, anyRedactions, t])
+  }, [loaded, anyRedactions, t, confirmAction])
 
   const onAddAnotherPhoto = useCallback(
     async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -1519,8 +1637,17 @@ export function App(): JSX.Element {
             zipUrl={batchZipUrl}
             zipFilename={t.workspace.batchZipFilename}
             onRemove={removeBatchItem}
-            onClear={() => {
-              if (batch.length && !window.confirm(t.workspace.batchClearAllConfirm)) return
+            onClear={async () => {
+              if (batch.length) {
+                const ok = await confirmAction({
+                  title: t.workspace.batchClearAllTitle,
+                  body: t.workspace.batchClearAllConfirm,
+                  confirmLabel: t.workspace.commonDelete,
+                  cancelLabel: t.workspace.commonCancel,
+                  destructive: true,
+                })
+                if (!ok) return
+              }
               clearBatch()
             }}
             onAddMore={onFiles}
@@ -1649,7 +1776,7 @@ export function App(): JSX.Element {
             presets={presets}
             onApplyPreset={applyPreset}
             onSavePreset={onSaveCurrentPreset}
-            onDeletePreset={removePreset}
+            onDeletePreset={(id) => { removePreset(id); pushToast(t.workspace.toastPresetDeleted) }}
             onClearAllPresets={onClearAllPresets}
             onDeleteAllLocalSettings={onDeleteAllLocalSettings}
             canSavePreset={!!recipient.trim() || !!purpose.trim()}
@@ -1734,6 +1861,17 @@ export function App(): JSX.Element {
 
       <HowItWorksDialog open={howOpen} onOpenChange={setHowOpen} strings={t} />
       <PrivacyDialog open={privacyOpen} onOpenChange={setPrivacyOpen} strings={t} />
+      <ConfirmDialog
+        open={!!confirmState?.open}
+        options={confirmState}
+        onResult={handleConfirmResult}
+      />
+      <PromptDialog
+        open={!!promptState?.open}
+        options={promptState}
+        onResult={handlePromptResult}
+      />
+      <ToastRegion toasts={toasts} onDismiss={dismissToast} />
     </div>
     </TooltipProvider>
   )
@@ -2378,29 +2516,88 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                         size="icon"
                         onClick={cropMode ? onCancelCrop : onStartCrop}
                         disabled={adjusting}
-                        aria-label={strings.workspace.adjustCrop}
+                        aria-label={cropMode ? strings.workspace.adjustCropCancel : strings.workspace.adjustCrop}
                         aria-pressed={cropMode}
                       >
                         <Crop className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>{strings.workspace.adjustCrop}</TooltipContent>
+                    <TooltipContent>
+                      {cropMode ? strings.workspace.adjustCropCancel : strings.workspace.adjustCrop}
+                    </TooltipContent>
                   </Tooltip>
-                  <Tooltip>
-                    <TooltipTrigger asChild>
-                      <Button
-                        variant={tuneOpen ? 'default' : 'ghost'}
-                        size="icon"
-                        onClick={onToggleTune}
-                        disabled={adjusting}
+                  {cropMode && (
+                    <Button
+                      size="sm"
+                      onClick={onApplyCrop}
+                      disabled={
+                        adjusting ||
+                        !cropRect ||
+                        cropRect.w < MIN_RECT * 2 ||
+                        cropRect.h < MIN_RECT * 2
+                      }
+                      className="ml-1 h-9"
+                    >
+                      {strings.workspace.adjustCropApply}
+                    </Button>
+                  )}
+                  <div className="relative">
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          variant={tuneOpen ? 'default' : 'ghost'}
+                          size="icon"
+                          onClick={onToggleTune}
+                          disabled={adjusting}
+                          aria-label={strings.workspace.adjustTuneToggle}
+                          aria-pressed={tuneOpen}
+                          aria-expanded={tuneOpen}
+                        >
+                          <SlidersHorizontal className="h-4 w-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>{strings.workspace.adjustTuneToggle}</TooltipContent>
+                    </Tooltip>
+                    {tuneOpen && (
+                      <div
+                        role="dialog"
                         aria-label={strings.workspace.adjustTuneToggle}
-                        aria-pressed={tuneOpen}
+                        className="absolute right-0 top-full mt-2 z-30 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-popover text-popover-foreground p-3 space-y-3 shadow-lg animate-fade-in"
                       >
-                        <SlidersHorizontal className="h-4 w-4" />
-                      </Button>
-                    </TooltipTrigger>
-                    <TooltipContent>{strings.workspace.adjustTuneToggle}</TooltipContent>
-                  </Tooltip>
+                        <div className="flex items-center justify-between">
+                          <span className="text-xs font-medium text-foreground">
+                            {strings.workspace.adjustTuneToggle}
+                          </span>
+                          <button
+                            type="button"
+                            onClick={onResetTune}
+                            disabled={adjusting}
+                            className="text-[11px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+                          >
+                            {strings.workspace.adjustTuneReset}
+                          </button>
+                        </div>
+                        <SliderRow
+                          label={strings.workspace.adjustBrightness}
+                          value={brightness}
+                          min={-100}
+                          max={100}
+                          step={1}
+                          formatValue={(v) => (v > 0 ? `+${Math.round(v)}` : `${Math.round(v)}`)}
+                          onChange={onBrightnessChange}
+                        />
+                        <SliderRow
+                          label={strings.workspace.adjustContrast}
+                          value={contrast}
+                          min={-100}
+                          max={100}
+                          step={1}
+                          formatValue={(v) => (v > 0 ? `+${Math.round(v)}` : `${Math.round(v)}`)}
+                          onChange={onContrastChange}
+                        />
+                      </div>
+                    )}
+                  </div>
                   <Tooltip>
                     <TooltipTrigger asChild>
                       <Button
@@ -2546,41 +2743,6 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             />
           )}
 
-          {loaded.kind === 'image' && tuneOpen && (
-            <div className="mt-3 rounded-lg border border-border p-3 space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="text-xs font-medium text-foreground">
-                  {strings.workspace.adjustTuneToggle}
-                </span>
-                <button
-                  type="button"
-                  onClick={onResetTune}
-                  disabled={adjusting}
-                  className="text-[11px] text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
-                >
-                  {strings.workspace.adjustTuneReset}
-                </button>
-              </div>
-              <SliderRow
-                label={strings.workspace.adjustBrightness}
-                value={brightness}
-                min={-100}
-                max={100}
-                step={1}
-                formatValue={(v) => (v > 0 ? `+${Math.round(v)}` : `${Math.round(v)}`)}
-                onChange={onBrightnessChange}
-              />
-              <SliderRow
-                label={strings.workspace.adjustContrast}
-                value={contrast}
-                min={-100}
-                max={100}
-                step={1}
-                formatValue={(v) => (v > 0 ? `+${Math.round(v)}` : `${Math.round(v)}`)}
-                onChange={onContrastChange}
-              />
-            </div>
-          )}
         </div>
       </section>
 

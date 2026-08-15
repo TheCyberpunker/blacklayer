@@ -13,6 +13,8 @@ export interface CompositeArgs {
   redactions?: readonly RedactionRect[]
   activeRect?: RedactionRect | null
   selectedRectId?: string | null
+  /** Rect IDs to briefly outline in accent color (e.g. after text search). */
+  highlightRectIds?: ReadonlySet<string>
 }
 
 export function composite({
@@ -23,6 +25,7 @@ export function composite({
   redactions,
   activeRect,
   selectedRectId,
+  highlightRectIds,
 }: CompositeArgs): void {
   const ctx = target.getContext('2d', { alpha: false })
   if (!ctx) return
@@ -41,6 +44,11 @@ export function composite({
   }
   if (activeRect) {
     drawActiveDragOverlay(ctx, target.width, target.height, activeRect)
+  }
+  if (highlightRectIds && highlightRectIds.size && redactions) {
+    for (const r of redactions) {
+      if (highlightRectIds.has(r.id)) drawHighlightOverlay(ctx, target.width, target.height, r)
+    }
   }
   if (selectedRectId && redactions) {
     const sel = redactions.find((r) => r.id === selectedRectId)
@@ -127,6 +135,32 @@ function drawSelectionOverlay(
   ctx.lineWidth = 1
   ctx.fillRect(rx + rw - handle, ry + rh - handle, handle, handle)
   ctx.strokeRect(rx + rw - handle, ry + rh - handle, handle, handle)
+  ctx.restore()
+}
+
+/**
+ * Bright accent outline drawn briefly after a bulk action (e.g. text search)
+ * so users notice the newly added rects even on a page they weren't looking at.
+ */
+function drawHighlightOverlay(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  rect: RedactionRect,
+): void {
+  const rx = Math.round(rect.x * w)
+  const ry = Math.round(rect.y * h)
+  const rw = Math.round(rect.w * w)
+  const rh = Math.round(rect.h * h)
+  if (rw <= 0 || rh <= 0) return
+  const pad = 3
+  ctx.save()
+  ctx.strokeStyle = 'rgba(255, 214, 0, 0.95)'
+  ctx.lineWidth = 3
+  ctx.strokeRect(rx - pad, ry - pad, rw + pad * 2, rh + pad * 2)
+  ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)'
+  ctx.lineWidth = 1
+  ctx.strokeRect(rx - pad - 1, ry - pad - 1, rw + pad * 2 + 2, rh + pad * 2 + 2)
   ctx.restore()
 }
 
