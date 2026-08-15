@@ -105,9 +105,12 @@ export interface Strings {
     patternFrameHint: string
     patternIridescentLabel: string
     patternIridescentHint: string
+    patternGuillocheLabel: string
+    patternGuillocheHint: string
     appliedCrosshatch: string
     appliedFrame: string
     appliedIridescent: string
+    appliedGuilloche: string
     presetsLabel: string
     presetsEmptyHint: string
     presetsSave: string
@@ -363,9 +366,12 @@ export const enStrings: Strings = {
     patternFrameHint: 'Two thin borders around the page.',
     patternIridescentLabel: 'Add iridescent overlay',
     patternIridescentHint: 'A decorative rainbow gradient with a fine dot texture. Distinctly visible as a user-added watermark, not a real security foil.',
+    patternGuillocheLabel: 'Add guilloche curves',
+    patternGuillocheHint: 'Interwoven Lissajous curves in the style of banknote line-work. Purely decorative, not a claim of authenticity.',
     appliedCrosshatch: 'Crosshatch pattern applied',
     appliedFrame: 'Border frame applied',
     appliedIridescent: 'Iridescent overlay applied',
+    appliedGuilloche: 'Guilloche curves applied',
     presetsLabel: 'Presets',
     presetsEmptyHint: 'Save the current recipient, purpose, and protection level as a preset for next time.',
     presetsSave: 'Save current as preset',
@@ -623,9 +629,12 @@ export const esStrings: Strings = {
     patternFrameHint: 'Dos bordes finos alrededor de la página.',
     patternIridescentLabel: 'Añadir capa iridiscente',
     patternIridescentHint: 'Un degradado decorativo con una textura de puntos fina. Se ve claramente como una marca añadida, no como un holograma real de seguridad.',
+    patternGuillocheLabel: 'Añadir curvas de guilloche',
+    patternGuillocheHint: 'Curvas de Lissajous entrelazadas al estilo de las líneas de billetes y certificados. Es decorativo, no acredita autenticidad.',
     appliedCrosshatch: 'Patrón de trama aplicado',
     appliedFrame: 'Marco aplicado',
     appliedIridescent: 'Capa iridiscente aplicada',
+    appliedGuilloche: 'Curvas de guilloche aplicadas',
     presetsLabel: 'Ajustes guardados',
     presetsEmptyHint: 'Guarda el destinatario, motivo y nivel actuales como un ajuste para la próxima vez.',
     presetsSave: 'Guardar como ajuste',

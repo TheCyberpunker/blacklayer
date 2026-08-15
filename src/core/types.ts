@@ -61,6 +61,12 @@ export interface WatermarkOptions {
      * hologram foil.
      */
     iridescent: boolean
+    /**
+     * Interwoven Lissajous curves reminiscent of banknote guilloche patterns.
+     * Purely decorative overlay drawn at low alpha so document content remains
+     * readable. Not a claim of authenticity.
+     */
+    guilloche: boolean
   }
 }
 
@@ -71,12 +77,13 @@ export interface ProtectionProfile {
 }
 
 const BASE_COLOR = { r: 0.1, g: 0.1, b: 0.1 }
-const NO_PATTERNS = { crosshatch: false, frame: false, iridescent: false }
+const NO_PATTERNS = { crosshatch: false, frame: false, iridescent: false, guilloche: false }
 
 export interface ProfileOverrides {
   crosshatch?: boolean
   frame?: boolean
   iridescent?: boolean
+  guilloche?: boolean
   opacity?: number
   rotationDeg?: number
   fontSize?: number
@@ -103,6 +110,7 @@ export function profileFor(
         crosshatch: overrides.crosshatch ?? base.watermark.patterns.crosshatch,
         frame: overrides.frame ?? base.watermark.patterns.frame,
         iridescent: overrides.iridescent ?? base.watermark.patterns.iridescent,
+        guilloche: overrides.guilloche ?? base.watermark.patterns.guilloche,
       },
     },
   }
@@ -160,7 +168,7 @@ function baseProfile(level: ProtectionLevel, text: WatermarkText): ProtectionPro
           color: BASE_COLOR,
           seed: 0,
           jitter: 0,
-          patterns: { crosshatch: true, frame: true, iridescent: false },
+          patterns: { crosshatch: true, frame: true, iridescent: false, guilloche: false },
         },
         metadata: 'neutralize',
       }

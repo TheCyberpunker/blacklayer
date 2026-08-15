@@ -4,7 +4,7 @@ import { formatWatermarkLines } from '../types.ts'
 import { applyMetadataMode, hasDigitalSignature } from './metadata.ts'
 import { rasterizePageWithRedactions } from './rasterize-page.ts'
 import { mulberry32 } from '../random/prng.ts'
-import { drawWavyPage } from '../watermark/wavy.ts'
+import { drawWatermarkOnCanvas } from '../watermark/draw.ts'
 
 export interface ApplyPdfWatermarkArgs {
   source: ArrayBuffer
@@ -75,23 +75,30 @@ async function drawWatermarkOnPdfPage(
   const color = rgb(r, g, b)
   const anyLines = lines.some((l) => l.trim())
 
-  if (anyLines) {
-    if (options.tile) {
-      const rowText = lines.filter((l) => l.trim()).join('  ·  ')
-      if (canUseCanvas) {
-        // Browser export: render the wavy pattern to an offscreen canvas,
-        // embed as a single image stamp. One drawImage per page beats
-        // thousands of per-glyph text ops.
-        await drawPdfWavyViaStamp(pdf, page, rowText, width, height, options)
-      } else {
-        // Node / test fallback: per-glyph drawText. Larger output but keeps
-        // the smoke test dependency-free.
-        const scaleFactor = Math.min(width, height) / 800
-        const fontSize = Math.max(6, options.fontSize * scaleFactor)
-        drawPdfWavy(page, font, rowText, width, height, fontSize, options.opacity, color, options.seed, options.rotationDeg)
-      }
-    } else {
-      drawPdfBlock(page, lines, font, width / 2, height / 2, options.rotationDeg, options.fontSize, options.opacity, color)
+  const rowText = anyLines ? lines.filter((l) => l.trim()).join('  ·  ') : ''
+  const willTileText = anyLines && options.tile
+  const needsCanvasStamp =
+    willTileText || options.patterns.iridescent || options.patterns.guilloche
+
+  if (anyLines && !options.tile) {
+    drawPdfBlock(page, lines, font, width / 2, height / 2, options.rotationDeg, options.fontSize, options.opacity, color)
+  }
+
+  if (needsCanvasStamp) {
+    if (canUseCanvas) {
+      // Browser export: render wavy + iridescent + guilloche onto one offscreen
+      // canvas and embed as a single PNG stamp per page. One drawImage beats
+      // thousands of per-glyph text ops and lets the canvas-only overlays
+      // (iridescent gradient, guilloche curves) reach the exported artifact.
+      await drawPdfCanvasStamp(pdf, page, rowText, width, height, options, {
+        renderWavy: willTileText,
+      })
+    } else if (willTileText) {
+      // Node / test fallback: per-glyph drawText for wavy. Iridescent and
+      // guilloche require canvas 2D, so they're only in the browser export.
+      const scaleFactor = Math.min(width, height) / 800
+      const fontSize = Math.max(6, options.fontSize * scaleFactor)
+      drawPdfWavy(page, font, rowText, width, height, fontSize, options.opacity, color, options.seed, options.rotationDeg)
     }
   }
 
@@ -99,13 +106,14 @@ async function drawWatermarkOnPdfPage(
   if (options.patterns.frame) drawPdfFrame(page, width, height, options, color)
 }
 
-async function drawPdfWavyViaStamp(
+async function drawPdfCanvasStamp(
   pdf: PDFDocument,
   page: ReturnType<PDFDocument['getPages']>[number],
   text: string,
   pageWidth: number,
   pageHeight: number,
   options: WatermarkOptions,
+  flags: { renderWavy: boolean },
 ): Promise<void> {
   // Render at 2× the page point size so the stamp holds up under viewer zoom.
   const scale = 2
@@ -118,30 +126,43 @@ async function drawPdfWavyViaStamp(
   if (!ctx) return
 
   // Transparent background so the stamp overlays the source page cleanly.
-  // Base off options.fontSize so the Advanced "Text size" slider actually moves
-  // the pattern in the export.
-  const fontSize = Math.max(6, Math.round(options.fontSize * (Math.min(w, h) / 800)))
   const { r, g, b } = options.color
   const rr = Math.round(r * 255)
   const gg = Math.round(g * 255)
   const bb = Math.round(b * 255)
   const colorBase = (alpha: number) => `rgba(${rr}, ${gg}, ${bb}, ${alpha})`
 
-  drawWavyPage({
+  // The crosshatch and frame layers stay as pdf-lib vector primitives (crisper
+  // and smaller than a raster), so we mask them off before delegating the rest
+  // to the shared canvas routine. The wavy layer is opt-in per call.
+  const stampOptions: WatermarkOptions = {
+    ...options,
+    patterns: {
+      ...options.patterns,
+      crosshatch: false,
+      frame: false,
+    },
+    // Force tile so drawWatermarkOnCanvas takes the wavy branch when we want it.
+    tile: flags.renderWavy,
+  }
+
+  const scaleFactor = Math.min(w, h) / 800
+  const effectiveFontSize = Math.max(6, options.fontSize * scaleFactor)
+  const lines = flags.renderWavy ? [text] : []
+
+  drawWatermarkOnCanvas({
     ctx,
     width: w,
     height: h,
-    text,
-    fontSize,
-    opacity: options.opacity,
-    color: colorBase,
-    seed: options.seed,
-    baseRotationDeg: options.rotationDeg,
+    lines,
+    options: stampOptions,
+    effectiveFontSize,
+    colorBase,
   })
 
   const pngBlob = await new Promise<Blob>((resolve, reject) => {
     canvas.toBlob(
-      (b) => (b ? resolve(b) : reject(new Error('toBlob returned null'))),
+      (blob) => (blob ? resolve(blob) : reject(new Error('toBlob returned null'))),
       'image/png',
     )
   })

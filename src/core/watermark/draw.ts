@@ -1,5 +1,6 @@
 import type { WatermarkOptions } from '../types.ts'
 import { drawWavyPage } from './wavy.ts'
+import { mulberry32 } from '../random/prng.ts'
 
 /**
  * Shared canvas-2D drawing routine for the watermark overlay. Used by:
@@ -59,8 +60,67 @@ export function drawWatermarkOnCanvas({
   }
 
   if (options.patterns.iridescent) drawIridescent(ctx, width, height, options)
+  if (options.patterns.guilloche) drawGuilloche(ctx, width, height, options, colorBase)
   if (options.patterns.crosshatch) drawCrosshatch(ctx, width, height, options, colorBase)
   if (options.patterns.frame) drawFrame(ctx, width, height, options, colorBase)
+}
+
+/**
+ * Decorative guilloche pattern — a family of Lissajous curves layered at low
+ * alpha, evocative of the fine interwoven line-work found on banknotes and
+ * official certificates. Purely visual; document content stays readable. Not a
+ * claim of authenticity, and the curve parameters are jittered per seed so it
+ * doesn't match any real security print.
+ */
+function drawGuilloche(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  options: WatermarkOptions,
+  colorBase: (alpha: number) => string,
+): void {
+  const scaleFactor = Math.min(width, height) / 800
+  const alpha = Math.max(0.1, Math.min(0.28, options.opacity * 0.55))
+  const stroke = Math.max(0.5, 0.75 * scaleFactor)
+  const rng = mulberry32(options.seed || 1)
+  const cx = width / 2
+  const cy = height / 2
+  const rx = width * 0.42
+  const ry = height * 0.42
+
+  const curves = 5
+  const steps = 720
+
+  ctx.save()
+  ctx.strokeStyle = colorBase(alpha)
+  ctx.lineWidth = stroke
+  ctx.lineJoin = 'round'
+  ctx.lineCap = 'round'
+
+  for (let i = 0; i < curves; i++) {
+    // Distinct Lissajous frequency pair + phase per curve so the family
+    // weaves without repeating exactly.
+    const a = 3 + Math.floor(rng() * 4)
+    const b = 4 + Math.floor(rng() * 4)
+    const phase = rng() * Math.PI * 2
+    const rot = (rng() - 0.5) * 0.6
+    const cos = Math.cos(rot)
+    const sin = Math.sin(rot)
+
+    ctx.beginPath()
+    for (let s = 0; s <= steps; s++) {
+      const t = (s / steps) * Math.PI * 2
+      const lx = Math.sin(a * t + phase) * rx
+      const ly = Math.sin(b * t) * ry
+      const x = cx + lx * cos - ly * sin
+      const y = cy + lx * sin + ly * cos
+      if (s === 0) ctx.moveTo(x, y)
+      else ctx.lineTo(x, y)
+    }
+    ctx.stroke()
+  }
+
+  ctx.restore()
 }
 
 /**
