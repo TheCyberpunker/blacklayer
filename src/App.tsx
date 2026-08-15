@@ -137,6 +137,19 @@ function buildWatermarkText(
   }
 }
 
+/**
+ * Rotate a redaction rect stored in normalized [0,1] coords by 90° in the
+ * given direction, so that after the underlying image is rotated the rect
+ * still covers the same document content. Width and height swap.
+ */
+function rotateRect90(r: RedactionRect, dir: 'cw' | 'ccw'): RedactionRect {
+  const { x, y, w, h } = r
+  if (dir === 'cw') {
+    return { ...r, x: 1 - y - h, y: x, w: h, h: w }
+  }
+  return { ...r, x: y, y: 1 - x - w, w: h, h: w }
+}
+
 export function App(): JSX.Element {
   const { lang, setLang } = useLang()
   const { theme, setTheme } = useTheme()
@@ -1345,20 +1358,27 @@ export function App(): JSX.Element {
   const applyAdjust = useCallback(
     async (kind: 'rotate-left' | 'rotate-right' | 'grayscale') => {
       if (!loaded || loaded.kind !== 'image' || !originalImageFile) return
-      const willRotate = kind !== 'grayscale'
-      if (willRotate && anyRedactions) {
-        if (!window.confirm(t.workspace.adjustConfirmClearRedactions)) return
-      }
-      if (willRotate) {
-        const delta = kind === 'rotate-right' ? 90 : 270
-        const nextRotation = (imageRotationDeg + delta) % 360
-        if (anyRedactions) setRedactionsByPage(new Map())
-        await rederiveImage({ rotationDeg: nextRotation })
-      } else {
+      if (kind === 'grayscale') {
         await rederiveImage({ grayscale: !imageGrayscale })
+        return
       }
+      // Rotate: transform any existing redactions by the same delta so they
+      // land on the same pixels of the document after the image is rotated,
+      // instead of being wiped.
+      const delta = kind === 'rotate-right' ? 90 : 270
+      const nextRotation = (imageRotationDeg + delta) % 360
+      if (anyRedactions) {
+        setRedactionsByPage((prev) => {
+          const next = new Map<number, RedactionRect[]>()
+          for (const [idx, arr] of prev) {
+            next.set(idx, arr.map((r) => rotateRect90(r, kind === 'rotate-right' ? 'cw' : 'ccw')))
+          }
+          return next
+        })
+      }
+      await rederiveImage({ rotationDeg: nextRotation })
     },
-    [loaded, originalImageFile, imageRotationDeg, imageGrayscale, anyRedactions, t, rederiveImage],
+    [loaded, originalImageFile, imageRotationDeg, imageGrayscale, anyRedactions, rederiveImage],
   )
 
   // Debounced re-derivation on brightness / contrast slider release.
