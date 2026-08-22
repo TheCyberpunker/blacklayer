@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 140" width="640" height="140" role="img" aria-label="BlackLayer">
+  <!-- Wordmark for LIGHT backgrounds. Text "BlackLayer" split by the app's
+       compare slider: left half sharp, right half blurred. Nothing else. -->
+  <defs>
+    <clipPath id="lhs"><rect x="0" y="0" width="320" height="140"/></clipPath>
+    <clipPath id="rhs"><rect x="320" y="0" width="320" height="140"/></clipPath>
+    <filter id="hide" x="-3%" y="-3%" width="106%" height="106%">
+      <feGaussianBlur stdDeviation="5.5"/>
+    </filter>
+  </defs>
+  <g font-family="Inter, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
+     font-weight="800" font-size="96" letter-spacing="-0.035em" fill="#111827">
+    <g clip-path="url(#lhs)"><text x="24" y="100">BlackLayer</text></g>
+    <g clip-path="url(#rhs)" filter="url(#hide)"><text x="24" y="100">BlackLayer</text></g>
+  </g>
+  <line x1="320" y1="18" x2="320" y2="122" stroke="#111827" stroke-width="1.5" stroke-dasharray="5 4" opacity="0.5"/>
+  <circle cx="320" cy="70" r="10" fill="#111827"/>
+  <path d="M 316 65 L 312 70 L 316 75 M 324 65 L 328 70 L 324 75"
+        fill="none" stroke="#ffffff" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

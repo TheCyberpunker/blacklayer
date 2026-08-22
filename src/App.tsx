@@ -2097,7 +2097,18 @@ function Header({
     <header className="border-b border-border/60 backdrop-blur supports-[backdrop-filter]:bg-background/70 sticky top-0 z-40">
       <div className="max-w-7xl 2xl:max-w-[1440px] mx-auto px-6 h-14 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
-          <span className="text-lg font-bold tracking-tight">BlackLayer</span>
+          <img
+            src="/logo-wordmark.svg"
+            alt="BlackLayer"
+            className="block dark:hidden h-8 w-auto select-none"
+            draggable={false}
+          />
+          <img
+            src="/logo-wordmark-dark.svg"
+            alt="BlackLayer"
+            className="hidden dark:block h-8 w-auto select-none"
+            draggable={false}
+          />
           <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-muted-foreground border border-border/60 rounded px-2 py-0.5">
             <Shield className="h-3 w-3" />
             Local

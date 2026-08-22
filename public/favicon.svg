@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64" role="img" aria-label="BlackLayer">
+  <!-- Big bold "B", left half sharp, right half blurred. Adapts to the
+       browser's colour scheme for readable chrome. -->
+  <style>
+    :root { color-scheme: light dark; }
+    .bg { fill: #ffffff; }
+    .fg { fill: #111827; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #111827; }
+      .fg { fill: #f5f5f5; }
+    }
+  </style>
+  <defs>
+    <clipPath id="lhs"><rect x="0" y="0" width="32" height="64"/></clipPath>
+    <clipPath id="rhs"><rect x="32" y="0" width="32" height="64"/></clipPath>
+    <filter id="hide" x="-10%" y="-10%" width="120%" height="120%">
+      <feGaussianBlur stdDeviation="2.6"/>
+    </filter>
+  </defs>
+  <rect class="bg" x="0" y="0" width="64" height="64" rx="14"/>
+  <g font-family="Inter, system-ui, -apple-system, 'Segoe UI', Helvetica, Arial, sans-serif"
+     font-weight="900" font-size="56" letter-spacing="-0.04em">
+    <g clip-path="url(#lhs)"><text class="fg" x="14" y="50">B</text></g>
+    <g clip-path="url(#rhs)" filter="url(#hide)"><text class="fg" x="14" y="50">B</text></g>
+  </g>
+</svg>

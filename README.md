@@ -1,3 +1,12 @@
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="public/logo-wordmark-dark.svg">
+    <img src="public/logo-wordmark.svg" alt="BlackLayer" width="520">
+  </picture>
+</p>
+
+<p align="center"><strong>Local-first document protection for safer sharing.</strong></p>
+
 # BlackLayer
 
 Local-first document protection for safer sharing. Add purpose-bound watermarks, redact sensitive areas, remove hidden metadata, and export protected PDFs or images entirely on your device. No uploads, no accounts, no cloud.
