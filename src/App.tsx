@@ -2834,7 +2834,8 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             Filename truncates, Descartar isolated on the right, and the
             "second photo" chip appears inline (not as a full banner) when
             the doc is an ID card and the user hasn't dismissed it. */}
-        <div className="mb-3 flex items-center gap-3 min-w-0">
+        {/* Row 1: file identity + Discard. Single line, filename truncates. */}
+        <div className="mb-2 flex items-center gap-3 min-w-0">
           <div className="flex items-center gap-2 text-sm min-w-0 flex-1">
             {loaded.kind === 'pdf' ? (
               <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
@@ -2849,7 +2850,23 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               {strings.workspace.fileSize(sizeKb)}
             </span>
           </div>
-          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+          <Button variant="ghost" size="sm" onClick={onClear} className="shrink-0">
+            <Trash2 className="h-4 w-4" />
+            {strings.workspace.clear}
+          </Button>
+        </div>
+
+        {(() => {
+          const showRow2 =
+            detection.type !== 'unknown' ||
+            detection.manual ||
+            detection.confidence !== 'high' ||
+            (addAnotherPromptOpen &&
+              loaded.kind === 'image' &&
+              loaded.base.totalPages === 1)
+          if (!showRow2) return null
+          return (
+          <div className="mb-3 flex items-center gap-2 flex-wrap">
             <DetectionBadge
               detection={detection}
               strings={strings}
@@ -2899,12 +2916,9 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                   </button>
                 </div>
               )}
-            <Button variant="ghost" size="sm" onClick={onClear}>
-              <Trash2 className="h-4 w-4" />
-              {strings.workspace.clear}
-            </Button>
           </div>
-        </div>
+          )
+        })()}
 
         <div
           className={cn(
