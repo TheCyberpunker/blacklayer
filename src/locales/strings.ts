@@ -34,10 +34,18 @@ export interface Strings {
     restart: string
     steps: {
       drop: { title: string; body: string }
-      tabs: { title: string; body: string }
-      recipient: { title: string; body: string }
+      detection: { title: string; body: string }
+      zoom: { title: string; body: string }
       compare: { title: string; body: string }
       redact: { title: string; body: string }
+      tabs: { title: string; body: string }
+      recipient: { title: string; body: string }
+      level: { title: string; body: string }
+      metadata: { title: string; body: string }
+      template: { title: string; body: string }
+      advanced: { title: string; body: string }
+      output: { title: string; body: string }
+      presets: { title: string; body: string }
       protect: { title: string; body: string }
     }
   }
@@ -353,13 +361,13 @@ export const enStrings: Strings = {
         title: 'Start here — drop a document',
         body: 'Drop a PDF, JPG, PNG or WebP over this area, or click to pick one. The file is read on your device and never leaves it.',
       },
-      tabs: {
-        title: 'Everything you can change is here',
-        body: 'Four short tabs, one thing each. Copy: who it goes to and why. Protection: how strong. Template: fields to hide by default on ID cards. Advanced: colors, size, and details.',
+      detection: {
+        title: 'What BlackLayer thinks it is',
+        body: 'BlackLayer tries to identify the document from its filename, its text, and its page size. You can override it here if it got it wrong. For photos of ID cards, click Analyze text to read them locally.',
       },
-      recipient: {
-        title: 'Start with the recipient and the purpose',
-        body: 'BlackLayer writes those two words across the whole document as a watermark. If a copy ends up somewhere it should not be, you can see who received it and what for.',
+      zoom: {
+        title: 'Zoom and fit',
+        body: 'Zoom into the preview to check details, and press the percentage to reset to fit. Keyboard: Cmd or Ctrl + and -, and 0 to fit.',
       },
       compare: {
         title: 'Compare original and protected',
@@ -368,6 +376,38 @@ export const enStrings: Strings = {
       redact: {
         title: 'Hide anything else you want',
         body: 'Turn this on to draw over anything the automatic template did not cover: a signature, a face, a phone number, a barcode. The area is destroyed at the pixel level, not just covered.',
+      },
+      tabs: {
+        title: 'All the options live here',
+        body: 'Four tabs, one thing each. Copy: who it goes to and why. Protection: how strong. Template: fields to hide by default on ID cards. Advanced: colors, size, and details. I will walk you through each one now.',
+      },
+      recipient: {
+        title: 'Who it is for and why',
+        body: 'The recipient and purpose become the visible watermark across the whole document. If a copy ends up somewhere it should not be, you can see who received it and what for. Turn on Customize text if you want to write your own line instead.',
+      },
+      level: {
+        title: 'How strong the protection is',
+        body: 'Basic: watermark only. Recommended: watermark plus a light security pattern and metadata stripped. Maximum: heavier pattern, stronger watermark, all hidden data removed. Bumps of protection also mean the preview gets busier.',
+      },
+      metadata: {
+        title: 'What the file remembers about itself',
+        body: 'PDFs and images carry hidden metadata: author, edit history, timestamps, GPS on photos. Click here to see what is embedded now, remove it all, keep it as-is, or replace it with values you choose.',
+      },
+      template: {
+        title: 'Fields to hide by default',
+        body: 'For ID cards and similar documents BlackLayer suggests fields to hide automatically: the number, date of birth, signature. Tap a field to toggle it. You can still add manual redactions on top.',
+      },
+      advanced: {
+        title: 'Fine control',
+        body: 'Change the watermark size, angle, color, opacity and how wavy it is. Turn security patterns on or off. Only touch these if the defaults do not fit your document.',
+      },
+      output: {
+        title: 'PDF or images',
+        body: 'A multi-page PDF can be downloaded as a single PDF or as a zip of PNG images, one per page. Some recipients prefer images; use PDF for anything long.',
+      },
+      presets: {
+        title: 'Save recurring recipients',
+        body: 'If you often send copies to the same person for the same reason, save the combination as a preset here. Presets live only in your browser.',
       },
       protect: {
         title: 'When it looks right, download',
@@ -709,13 +749,13 @@ export const esStrings: Strings = {
         title: 'Empieza aquí — suelta un documento',
         body: 'Arrastra un PDF, JPG, PNG o WebP sobre esta zona, o haz clic para elegir uno. El archivo se lee en tu dispositivo y no sale de él.',
       },
-      tabs: {
-        title: 'Aquí están todas las opciones',
-        body: 'Cuatro pestañas cortas, una cosa cada una. Copia: para quién y para qué es. Protección: cuánta protección quieres. Plantilla: qué campos tapar por defecto en documentos de identidad. Avanzado: colores, tamaño y detalles.',
+      detection: {
+        title: 'Qué cree BlackLayer que es',
+        body: 'BlackLayer intenta identificar el documento por su nombre, su texto y el tamaño de la página. Si se equivoca, puedes corregirlo aquí. Para fotos de documentos de identidad, pulsa Analizar texto para leerlas en local.',
       },
-      recipient: {
-        title: 'Empieza por el destinatario y el motivo',
-        body: 'BlackLayer escribe esos dos datos por todo el documento como marca de agua. Si la copia acaba donde no debería, se ve quién la recibió y para qué.',
+      zoom: {
+        title: 'Zoom y ajuste',
+        body: 'Haz zoom en la vista previa para comprobar detalles y pulsa el porcentaje para volver al ajuste. Atajos: Cmd o Ctrl + y -, y 0 para ajustar.',
       },
       compare: {
         title: 'Compara el original con la copia protegida',
@@ -724,6 +764,38 @@ export const esStrings: Strings = {
       redact: {
         title: 'Tapa cualquier zona extra',
         body: 'Activa esto para dibujar sobre lo que la plantilla no cubre por defecto: una firma, una cara, un teléfono, un código. La zona se destruye a nivel de píxel, no se tapa por encima.',
+      },
+      tabs: {
+        title: 'Todas las opciones están aquí',
+        body: 'Cuatro pestañas, una cosa cada una. Copia: para quién y para qué. Protección: cuánta protección. Plantilla: qué campos tapar por defecto en documentos de identidad. Avanzado: colores, tamaño y detalles. Ahora te enseño cada una.',
+      },
+      recipient: {
+        title: 'Para quién es y para qué',
+        body: 'El destinatario y el motivo se convierten en la marca de agua visible por todo el documento. Si la copia acaba donde no debería, se ve quién la recibió y para qué. Activa Personalizar texto si prefieres escribir tu propia línea.',
+      },
+      level: {
+        title: 'Cuánta protección quieres',
+        body: 'Básica: solo marca de agua. Recomendada: marca de agua más un patrón ligero y metadata eliminada. Máxima: patrón más denso, marca más fuerte, toda la info oculta borrada. A más protección, la vista se ve más cargada.',
+      },
+      metadata: {
+        title: 'Lo que el archivo recuerda de sí mismo',
+        body: 'Los PDF y las imágenes llevan datos ocultos: autor, historial de ediciones, fechas, GPS en las fotos. Pulsa aquí para ver qué hay ahora, borrarlo todo, dejarlo tal cual o cambiarlo por valores que tú elijas.',
+      },
+      template: {
+        title: 'Campos a tapar por defecto',
+        body: 'Para documentos de identidad y similares, BlackLayer sugiere campos a tapar automáticamente: el número, la fecha de nacimiento, la firma. Pulsa cada campo para activarlo o desactivarlo. Puedes añadir zonas manuales encima.',
+      },
+      advanced: {
+        title: 'Ajuste fino',
+        body: 'Cambia el tamaño de la marca, el ángulo, el color, la opacidad y cuánto ondula. Activa o desactiva los patrones de seguridad. Toca esto sólo si los valores por defecto no encajan con tu documento.',
+      },
+      output: {
+        title: 'PDF o imágenes',
+        body: 'Un PDF de varias páginas se puede descargar como un único PDF o como un zip de imágenes PNG, una por página. A algunos destinatarios les vienen mejor las imágenes; para textos largos, mejor PDF.',
+      },
+      presets: {
+        title: 'Guarda destinatarios recurrentes',
+        body: 'Si sueles mandar copias a la misma persona por el mismo motivo, guarda esa combinación como preset aquí. Los presets viven sólo en tu navegador.',
       },
       protect: {
         title: 'Cuando esté como quieres, descarga',

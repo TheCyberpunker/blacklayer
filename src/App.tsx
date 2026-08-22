@@ -197,14 +197,26 @@ export function App(): JSX.Element {
       window.localStorage.setItem('blacklayer.seen-tour', '1')
     } catch { /* storage disabled */ }
   }, [])
+  const clickTab = useCallback((id: 'copia' | 'proteccion' | 'plantilla' | 'avanzado'): void => {
+    const el = document.querySelector(`[data-tour-tab="${id}"]`) as HTMLButtonElement | null
+    if (el && el.getAttribute('aria-selected') !== 'true') el.click()
+  }, [])
   const tourSteps = useMemo<readonly OnboardingStep[]>(() => ([
     { target: '[data-tour="drop"]', title: t.tour.steps.drop.title, body: t.tour.steps.drop.body, side: 'bottom' },
-    { target: '[data-tour="tabs"]', title: t.tour.steps.tabs.title, body: t.tour.steps.tabs.body, side: 'left' },
-    { target: '[data-tour="recipient"]', title: t.tour.steps.recipient.title, body: t.tour.steps.recipient.body, side: 'left' },
+    { target: '[data-tour="detection"]', title: t.tour.steps.detection.title, body: t.tour.steps.detection.body, side: 'bottom' },
+    { target: '[data-tour="zoom"]', title: t.tour.steps.zoom.title, body: t.tour.steps.zoom.body, side: 'bottom' },
     { target: '[data-tour="compare"]', title: t.tour.steps.compare.title, body: t.tour.steps.compare.body, side: 'bottom' },
     { target: '[data-tour="redact"]', title: t.tour.steps.redact.title, body: t.tour.steps.redact.body, side: 'bottom' },
+    { target: '[data-tour="tabs"]', title: t.tour.steps.tabs.title, body: t.tour.steps.tabs.body, side: 'left' },
+    { target: '[data-tour="recipient"]', title: t.tour.steps.recipient.title, body: t.tour.steps.recipient.body, side: 'left', onEnter: () => clickTab('copia') },
+    { target: '[data-tour="level"]', title: t.tour.steps.level.title, body: t.tour.steps.level.body, side: 'left', onEnter: () => clickTab('proteccion') },
+    { target: '[data-tour="metadata"]', title: t.tour.steps.metadata.title, body: t.tour.steps.metadata.body, side: 'left', onEnter: () => clickTab('proteccion') },
+    { target: '[data-tour="template"]', title: t.tour.steps.template.title, body: t.tour.steps.template.body, side: 'left', onEnter: () => clickTab('plantilla') },
+    { target: '[data-tour="advanced"]', title: t.tour.steps.advanced.title, body: t.tour.steps.advanced.body, side: 'left', onEnter: () => clickTab('avanzado') },
+    { target: '[data-tour="output"]', title: t.tour.steps.output.title, body: t.tour.steps.output.body, side: 'left' },
+    { target: '[data-tour="presets"]', title: t.tour.steps.presets.title, body: t.tour.steps.presets.body, side: 'left' },
     { target: '[data-tour="protect"]', title: t.tour.steps.protect.title, body: t.tour.steps.protect.body, side: 'left' },
-  ]), [t])
+  ]), [t, clickTab])
 
   const [loading, setLoading] = useState(false)
   const [loaded, setLoaded] = useState<LoadedFile | null>(null)
@@ -2942,7 +2954,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               loaded.base.totalPages === 1)
           if (!showRow2) return null
           return (
-          <div className="mb-3 flex items-center gap-2 flex-wrap">
+          <div className="mb-3 flex items-center gap-2 flex-wrap" data-tour="detection">
             <DetectionBadge
               detection={detection}
               strings={strings}
@@ -3187,7 +3199,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                 )
               })()}
               <div className="mx-2 h-6 w-px bg-border" aria-hidden="true" />
-              <div className="flex items-center gap-0.5">
+              <div className="flex items-center gap-0.5" data-tour="zoom">
                 <Tooltip>
                   <TooltipTrigger asChild>
                     <Button
@@ -3417,7 +3429,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
       {/* Controls */}
       <aside className="lg:sticky lg:top-20 lg:self-start flex flex-col gap-3">
         {/* Fixed top row: Presets. */}
-        <div className="flex items-center justify-end">
+        <div className="flex items-center justify-end" data-tour="presets">
           <PresetBar
             presets={presets}
             onApply={onApplyPreset}
@@ -3523,6 +3535,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                 type="button"
                 role="tab"
                 aria-selected={selected}
+                data-tour-tab={t.id}
                 onClick={() => setSidebarTab(t.id)}
                 className={cn(
                   'h-8 text-xs font-medium rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
@@ -3618,7 +3631,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           )}
 
           {sidebarTab === 'proteccion' && (
-            <section className="space-y-3" aria-label={strings.workspace.tabProteccion}>
+            <section className="space-y-3" aria-label={strings.workspace.tabProteccion} data-tour="level">
               <LevelPicker level={level} onChange={onLevelChange} strings={strings} />
               <p className="text-xs text-muted-foreground leading-relaxed">
                 {strings.workspace.levelDescription[level]}
@@ -3631,6 +3644,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               <button
                 type="button"
                 onClick={onOpenMetadataDialog}
+                data-tour="metadata"
                 className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
               >
                 {strings.workspace.metadataEditLink}
@@ -3657,6 +3671,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             if (template) {
               const tmplLang = strings.header.langLabel === 'Idioma' ? 'es' : 'en'
               return (
+                <div data-tour="template">
                 <TemplatePanel
                   template={template}
                   side={templateSide}
@@ -3669,6 +3684,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                   strings={strings}
                   embedded
                 />
+                </div>
               )
             }
             // Empty state: no template because either detection is weak or the
@@ -3676,7 +3692,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             // than gating the tab.
             const canRunOcr = !ocrRunning
             return (
-              <div className="space-y-3 rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+              <div className="space-y-3 rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground" data-tour="template">
                 <div className="flex items-start gap-2">
                   <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-foreground/60" />
                   <p className="leading-relaxed">
@@ -3734,7 +3750,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           })()}
 
           {sidebarTab === 'avanzado' && (
-            <section className="space-y-4" aria-label={strings.workspace.tabAvanzado}>
+            <section className="space-y-4" aria-label={strings.workspace.tabAvanzado} data-tour="advanced">
               <StyleSliders
                 opacity={opacity}
                 rotationDeg={rotationDeg}
@@ -3819,7 +3835,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             download decision not a protection setting. Only shown when it
             actually offers a choice: a multi-page PDF. */}
         {loaded.kind === 'pdf' && loaded.base.totalPages > 1 && (
-          <div className="flex items-center gap-2 text-xs">
+          <div className="flex items-center gap-2 text-xs" data-tour="output">
             <span className="text-muted-foreground shrink-0">
               {strings.workspace.outputFormatLabel}:
             </span>

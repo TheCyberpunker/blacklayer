@@ -12,6 +12,12 @@ export interface OnboardingStep {
    * the opposite side if there is not enough room on-screen.
    */
   side?: 'top' | 'bottom' | 'left' | 'right'
+  /**
+   * Called when the step becomes active, BEFORE the target is queried. Use it
+   * to switch app state so the target actually renders (e.g. change a tab).
+   * Runs on every enter, including when the user navigates back to the step.
+   */
+  onEnter?: () => void
 }
 
 export interface OnboardingProps {
@@ -48,6 +54,8 @@ export function Onboarding({ steps, active, onDone, labels }: OnboardingProps): 
   // hero drop zone vanishing after the user drops a file), we auto-advance.
   useEffect(() => {
     if (!active) return
+    // Let the step prime the UI (e.g. switch sidebar tab) before we query.
+    steps[step]?.onEnter?.()
     let cancelled = false
     let attempts = 0
     const maxAttempts = 100 // ~10 s at 100 ms
@@ -104,7 +112,10 @@ export function Onboarding({ steps, active, onDone, labels }: OnboardingProps): 
         if (tryFind()) return
         attempts++
         if (attempts >= maxAttempts) {
-          setNotFound(true)
+          // Target genuinely didn't appear (e.g. conditional section). If
+          // there are more steps, skip forward instead of dead-ending.
+          if (step < steps.length - 1) setStep(step + 1)
+          else setNotFound(true)
           return
         }
         window.setTimeout(poll, 100)
