@@ -35,7 +35,7 @@ import { purposesFor, recommendedLevel } from './core/detect/templates.ts'
 import { templateFor, type CardSide, type DocumentTemplate, type FieldRect, type TemplateProfile } from './core/templates/index.ts'
 import { generateSeed } from './core/random/seed.ts'
 import { hexToRgb01, rgb01ToHex } from './lib/color.ts'
-import { Contrast, Crop, ImagePlus, RotateCcw, RotateCw, ScanText, Search, SlidersHorizontal } from 'lucide-react'
+import { Contrast, Crop, ImagePlus, RotateCcw, RotateCw, ScanText, Search, SlidersHorizontal, ZoomIn, ZoomOut } from 'lucide-react'
 import { Button } from './components/ui/button.tsx'
 import { Input } from './components/ui/input.tsx'
 import { Label } from './components/ui/label.tsx'
@@ -253,6 +253,47 @@ export function App(): JSX.Element {
   const [templateSide, setTemplateSide] = useState<CardSide>('anverso')
   const [activeRect, setActiveRect] = useState<RedactionRect | null>(null)
   const [compareMode, setCompareMode] = useState<CompareMode>('protected')
+  // Canvas zoom. 1 = fit-to-container (default). Range [0.25, 4]. Redaction
+  // rects are stored in normalized [0,1] coords so zoom does not affect data;
+  // only the visual scale of the canvas + overlays via CSS transform.
+  const [zoom, setZoom] = useState<number>(1)
+  const [pan, setPan] = useState<{ x: number; y: number }>({ x: 0, y: 0 })
+  const zoomBounds = useMemo(() => ({ min: 0.5, max: 4 }), [])
+  const zoomIn = useCallback(() => setZoom((z) => Math.min(zoomBounds.max, +(z * 1.25).toFixed(3))), [zoomBounds])
+  const zoomOut = useCallback(() => setZoom((z) => Math.max(zoomBounds.min, +(z / 1.25).toFixed(3))), [zoomBounds])
+  const zoomFit = useCallback(() => { setZoom(1); setPan({ x: 0, y: 0 }) }, [])
+  // Reset pan whenever the user zooms back to <=1 so the content re-centers.
+  useEffect(() => { if (zoom <= 1) setPan({ x: 0, y: 0 }) }, [zoom])
+  // Reset zoom when the loaded document changes so a new file always opens at fit.
+  const zoomLoadedRef = useRef<File | null>(null)
+  useEffect(() => {
+    if (!loaded) {
+      zoomLoadedRef.current = null
+      return
+    }
+    if (zoomLoadedRef.current !== loaded.file) {
+      zoomLoadedRef.current = loaded.file
+      setZoom(1)
+      setPan({ x: 0, y: 0 })
+    }
+  }, [loaded])
+  // Keyboard shortcuts. Cmd/Ctrl + / - to zoom, 0 to fit. Ignore when the
+  // user is typing in an input.
+  useEffect(() => {
+    if (!loaded) return
+    const onKey = (e: KeyboardEvent) => {
+      const target = e.target as HTMLElement | null
+      const tag = target?.tagName
+      if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
+      if (e.metaKey || e.ctrlKey) {
+        if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomIn() }
+        else if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomOut() }
+        else if (e.key === '0') { e.preventDefault(); zoomFit() }
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [loaded, zoomIn, zoomOut, zoomFit])
   const [dividerX, setDividerX] = useState(0.5)
   const [dragActive, setDragActive] = useState(false)
   const [working, setWorking] = useState(false)
@@ -1905,6 +1946,14 @@ export function App(): JSX.Element {
             onClearOutput={clearOutput}
             outputFormat={outputFormat}
             onOutputFormatChange={setOutputFormat}
+            zoom={zoom}
+            onZoomIn={zoomIn}
+            onZoomOut={zoomOut}
+            onZoomFit={zoomFit}
+            zoomMin={zoomBounds.min}
+            zoomMax={zoomBounds.max}
+            pan={pan}
+            onPanChange={setPan}
             customEnabled={customEnabled}
             customText={customText}
             onToggleCustom={() => {
@@ -2422,6 +2471,14 @@ interface WorkspaceProps {
   onClearOutput: () => void
   outputFormat: 'pdf' | 'images'
   onOutputFormatChange: (v: 'pdf' | 'images') => void
+  zoom: number
+  onZoomIn: () => void
+  onZoomOut: () => void
+  onZoomFit: () => void
+  zoomMin: number
+  zoomMax: number
+  pan: { x: number; y: number }
+  onPanChange: (p: { x: number; y: number }) => void
   customEnabled: boolean
   customText: string
   onToggleCustom: () => void
@@ -2545,6 +2602,14 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     onClearOutput,
     outputFormat,
     onOutputFormatChange,
+    zoom,
+    onZoomIn,
+    onZoomOut,
+    onZoomFit,
+    zoomMin,
+    zoomMax,
+    pan,
+    onPanChange,
     customEnabled,
     customText,
     onToggleCustom,
@@ -2860,6 +2925,46 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                 )
               })()}
               <div className="mx-2 h-6 w-px bg-border" aria-hidden="true" />
+              <div className="flex items-center gap-0.5">
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={onZoomOut}
+                      disabled={zoom <= zoomMin + 0.001}
+                      aria-label={strings.workspace.zoomOut}
+                    >
+                      <ZoomOut className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{strings.workspace.zoomOut}</TooltipContent>
+                </Tooltip>
+                <button
+                  type="button"
+                  onClick={onZoomFit}
+                  className="text-[11px] font-mono tabular-nums text-muted-foreground hover:text-foreground w-12 text-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                  aria-label={strings.workspace.zoomFit}
+                  title={strings.workspace.zoomFit}
+                >
+                  {Math.round(zoom * 100)}%
+                </button>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      onClick={onZoomIn}
+                      disabled={zoom >= zoomMax - 0.001}
+                      aria-label={strings.workspace.zoomIn}
+                    >
+                      <ZoomIn className="h-4 w-4" />
+                    </Button>
+                  </TooltipTrigger>
+                  <TooltipContent>{strings.workspace.zoomIn}</TooltipContent>
+                </Tooltip>
+              </div>
+              <div className="mx-2 h-6 w-px bg-border" aria-hidden="true" />
               <Button
                 variant={redactMode ? 'default' : 'outline'}
                 size="sm"
@@ -2915,7 +3020,14 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             />
           )}
 
-          <div className="relative w-full aspect-[3/4] sm:aspect-auto sm:min-h-[520px] bg-white rounded-lg overflow-hidden shadow-sm">
+          <ZoomableFrame
+            zoom={zoom}
+            pan={pan}
+            onPanChange={onPanChange}
+            onWheelZoomIn={onZoomIn}
+            onWheelZoomOut={onZoomOut}
+            disablePan={redactMode || cropMode || compareMode === 'slider'}
+          >
             <canvas
               ref={canvasRef}
               onPointerDown={onPointerDown}
@@ -3024,7 +3136,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                 {strings.workspace.redactSectionTitle}
               </div>
             )}
-          </div>
+          </ZoomableFrame>
 
           {isMultiPage && (
             <PageStrip
@@ -4357,6 +4469,85 @@ function ComparePicker({
  * small anchored popover with the input + result summary. Lives outside the
  * secondary strip because it does not require redact mode to be active.
  */
+/**
+ * Zoomable + pannable canvas frame. Applies a CSS transform (scale + translate)
+ * to a child container that visually holds the canvas and its overlays. When
+ * pan is disabled (redact drawing, crop selection, compare-slider drag) the
+ * frame does not consume pointer events for panning; children handle them.
+ * Wheel + Ctrl/Cmd zooms; drag with primary pointer pans when zoom > 1.
+ */
+function ZoomableFrame({
+  zoom,
+  pan,
+  onPanChange,
+  onWheelZoomIn,
+  onWheelZoomOut,
+  disablePan,
+  children,
+}: {
+  zoom: number
+  pan: { x: number; y: number }
+  onPanChange: (p: { x: number; y: number }) => void
+  onWheelZoomIn: () => void
+  onWheelZoomOut: () => void
+  disablePan: boolean
+  children: React.ReactNode
+}): JSX.Element {
+  const dragging = useRef<{ startX: number; startY: number; originX: number; originY: number } | null>(null)
+  const canPan = zoom > 1 && !disablePan
+  return (
+    <div
+      className={cn(
+        'relative w-full aspect-[3/4] sm:aspect-auto sm:min-h-[520px] bg-white rounded-lg overflow-hidden shadow-sm',
+        canPan ? (dragging.current ? 'cursor-grabbing' : 'cursor-grab') : '',
+      )}
+      onWheel={(e) => {
+        if (!e.ctrlKey && !e.metaKey) return
+        e.preventDefault()
+        if (e.deltaY < 0) onWheelZoomIn()
+        else if (e.deltaY > 0) onWheelZoomOut()
+      }}
+      onPointerDown={(e) => {
+        if (!canPan) return
+        if (e.button !== 0) return
+        // The canvas onPointerDown calls preventDefault() when it grabbed a
+        // rect, started a crop selection, or began drawing a redaction. In
+        // those cases we skip pan. Empty-area clicks fall through here.
+        if (e.defaultPrevented) return
+        ;(e.currentTarget as Element).setPointerCapture?.(e.pointerId)
+        dragging.current = { startX: e.clientX, startY: e.clientY, originX: pan.x, originY: pan.y }
+      }}
+      onPointerMove={(e) => {
+        if (!dragging.current) return
+        const dx = e.clientX - dragging.current.startX
+        const dy = e.clientY - dragging.current.startY
+        onPanChange({ x: dragging.current.originX + dx, y: dragging.current.originY + dy })
+      }}
+      onPointerUp={(e) => {
+        if (!dragging.current) return
+        ;(e.currentTarget as Element).releasePointerCapture?.(e.pointerId)
+        dragging.current = null
+      }}
+      onPointerCancel={(e) => {
+        if (!dragging.current) return
+        ;(e.currentTarget as Element).releasePointerCapture?.(e.pointerId)
+        dragging.current = null
+      }}
+    >
+      <div
+        className="absolute inset-0"
+        style={{
+          transform: `translate(${pan.x}px, ${pan.y}px) scale(${zoom})`,
+          transformOrigin: 'center center',
+          transition: dragging.current ? 'none' : 'transform 120ms ease-out',
+        }}
+      >
+        {children}
+      </div>
+    </div>
+  )
+}
+
 function RailSearchIcon({
   strings,
   searchQuery,
