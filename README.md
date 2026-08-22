@@ -13,6 +13,10 @@
 
 **Español.** Protección de documentos local para compartirlos con más seguridad. Añade marcas de agua con destinatario y motivo, tapa zonas sensibles, elimina la información oculta y exporta PDFs o imágenes protegidos sin salir de tu dispositivo. Sin subidas, sin cuentas, sin nube.
 
+## Screenshots
+
+See [`demo/`](demo/README.md) for five annotated screenshots walking through the maximum-protection comparison, the protected result, the copy tab with zoom, the advanced controls, and manual pixelate redaction on a sample Spanish DNI.
+
 ## Who this is for / Casos de uso
 
 Everyday people who need to hand a copy of an identity document, a payslip, a rental agreement or a bank statement to a third party and want to reduce what that third party can do with it afterwards.
