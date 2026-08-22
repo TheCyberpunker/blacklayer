@@ -6,6 +6,11 @@
  * Everything here is dynamic-imported so the tesseract.js bundle (~800 KB gz)
  * is not on the critical path — it only downloads when the user asks for
  * text analysis on an image.
+ *
+ * Results are cached in-memory by a SHA-256 hash of the file bytes plus
+ * language, so re-running OCR on the same file (e.g. after the user cancels
+ * and retries) is instant. Cache clears on full page reload — deliberate,
+ * since a reload signals a fresh session.
  */
 import type { Lang } from '../../hooks/use-lang.ts'
 
@@ -36,6 +41,29 @@ function langsFor(uiLang: Lang): string[] {
   return uiLang === 'es' ? ['spa', 'eng'] : ['eng', 'spa']
 }
 
+const ocrCache = new Map<string, OcrResult>()
+
+async function hashFile(file: File): Promise<string> {
+  const buf = await file.arrayBuffer()
+  const digest = await crypto.subtle.digest('SHA-256', buf)
+  const bytes = new Uint8Array(digest)
+  let hex = ''
+  for (let i = 0; i < bytes.length; i++) hex += bytes[i]!.toString(16).padStart(2, '0')
+  return hex
+}
+
+/**
+ * Warm up the tesseract.js chunk (JS + wasm loader) without running OCR.
+ * Call in idle time after an image loads so the first user-triggered OCR
+ * skips the initial ~800 KB network fetch.
+ *
+ * Safe to call multiple times: dynamic import is memoized by the bundler.
+ * No language data is downloaded here — that happens on the first real run.
+ */
+export function preloadOcr(): void {
+  void import('tesseract.js').catch(() => {})
+}
+
 /**
  * Run OCR on a File (JPEG/PNG/WebP). Loads the tesseract worker on demand and
  * releases it when finished. Returns raw text + Tesseract's own confidence.
@@ -45,6 +73,51 @@ function langsFor(uiLang: Lang): string[] {
  */
 export async function runOcr(
   file: File,
+  uiLang: Lang,
+  onProgress?: (p: OcrProgress) => void,
+): Promise<OcrResult> {
+  // Cache lookup first. If we already OCR'd this exact bytes+lang combination
+  // this session, return the cached result and report a single "done" progress
+  // tick so the UI doesn't sit at 0.
+  const cacheKey = `img:${uiLang}:${await hashFile(file)}`
+  const cached = ocrCache.get(cacheKey)
+  if (cached) {
+    onProgress?.({ status: 'recognizing text', progress: 1 })
+    return cached
+  }
+  return runOcrInternal(file, cacheKey, uiLang, onProgress)
+}
+
+/**
+ * OCR a rendered PDF page (or any pre-rendered bitmap). The caller provides a
+ * stable cache key (e.g. `pdf:{hash}:{pageIndex}`) so the same page is not
+ * re-recognized across clicks.
+ */
+export async function runOcrOnBitmap(
+  bitmap: ImageBitmap,
+  cacheKeyBase: string,
+  uiLang: Lang,
+  onProgress?: (p: OcrProgress) => void,
+): Promise<OcrResult> {
+  const cacheKey = `bmp:${uiLang}:${cacheKeyBase}`
+  const cached = ocrCache.get(cacheKey)
+  if (cached) {
+    onProgress?.({ status: 'recognizing text', progress: 1 })
+    return cached
+  }
+  // Draw the ImageBitmap onto a canvas so Tesseract can consume it.
+  const canvas = document.createElement('canvas')
+  canvas.width = bitmap.width
+  canvas.height = bitmap.height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('canvas 2d context unavailable')
+  ctx.drawImage(bitmap, 0, 0)
+  return runOcrInternal(canvas, cacheKey, uiLang, onProgress)
+}
+
+async function runOcrInternal(
+  source: File | HTMLCanvasElement,
+  cacheKey: string,
   uiLang: Lang,
   onProgress?: (p: OcrProgress) => void,
 ): Promise<OcrResult> {
@@ -75,10 +148,12 @@ export async function runOcr(
   })
 
   try {
-    const result = await worker.recognize(file)
+    const result = await worker.recognize(source)
     const text = typeof result.data.text === 'string' ? result.data.text : ''
     const confidence = typeof result.data.confidence === 'number' ? result.data.confidence : 0
-    return { text, confidence }
+    const out = { text, confidence }
+    ocrCache.set(cacheKey, out)
+    return out
   } finally {
     await worker.terminate()
   }

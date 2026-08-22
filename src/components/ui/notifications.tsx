@@ -27,7 +27,10 @@ export function ToastRegion({
 }): JSX.Element {
   return (
     <div
-      className="pointer-events-none fixed bottom-4 right-4 z-[60] flex flex-col gap-2 max-w-[calc(100vw-2rem)]"
+      // On mobile the sticky bottom Protect bar (~72px + safe area) sits at
+      // bottom-0, so lift toasts above it. On lg+ there is no sticky bar,
+      // so the regular bottom-4 spacing applies.
+      className="pointer-events-none fixed right-4 z-[60] flex flex-col gap-2 max-w-[calc(100vw-2rem)] bottom-[calc(6rem+env(safe-area-inset-bottom))] lg:bottom-4"
       role="region"
       aria-live="polite"
     >

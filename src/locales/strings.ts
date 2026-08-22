@@ -32,6 +32,12 @@ export interface Strings {
     dropSub: string
     supported: string
     privacy: string
+    trustLocalTitle: string
+    trustLocalBody: string
+    trustNoAccountTitle: string
+    trustNoAccountBody: string
+    trustOfflineTitle: string
+    trustOfflineBody: string
   }
   workspace: {
     pageCount: (n: number) => string
@@ -208,6 +214,7 @@ export interface Strings {
     toastOcrInconclusive: string
     ocrAnalyze: string
     ocrRunning: string
+    ocrLoading: string
     ocrHint: string
     protectionSummary: (levelLabel: string) => string
     protectionSummaryMismatch: string
@@ -217,13 +224,20 @@ export interface Strings {
     tabPlantilla: string
     tabAvanzado: string
     patternsLabel: string
+    outputFormatLabel: string
+    outputFormatPdf: string
+    outputFormatImages: string
+    outputFormatPdfHint: string
+    outputFormatImagesHint: string
     templateEmpty: string
     templateEmptyHint: string
+    templateQuickPickLabel: string
   }
   result: {
     ready: string
     readySub: string
     download: string
+    protectAgain: string
     originalNote: string
     appliedRecipient: string
     appliedPurpose: string
@@ -260,19 +274,19 @@ export const enStrings: Strings = {
     howSteps: [
       {
         title: '1. Drop your document',
-        body: 'Choose or drag in a PDF, JPG, PNG, or WebP. The file is read directly from your device. Nothing is uploaded.',
+        body: 'Choose or drag a PDF, JPG, PNG, or WebP. The file is read directly from your device.',
       },
       {
-        title: '2. Tell us the context',
-        body: 'Enter who this copy is for and why. BlackLayer builds a purpose-bound watermark from your answers, and the live preview updates as you type.',
+        title: '2. BlackLayer identifies the document',
+        body: 'For PDFs the type is inferred from the file. For an image of an ID, click Analyze text to read it locally and unlock the field template that hides the number, date of birth, and signature by default.',
       },
       {
-        title: '3. Optionally hide sensitive areas',
-        body: 'Draw rectangles over anything the recipient does not need to see. Solid fill is safest; blur and pixelate are available but weaker.',
+        title: '3. Say who it is for and why',
+        body: 'Enter the recipient and the purpose. BlackLayer builds a visible watermark from your answers and updates the live preview as you type. You can also mark extra areas to hide with the redact tool on the canvas.',
       },
       {
-        title: '4. Download the protected copy',
-        body: 'A new file is generated in your browser and offered as a download. Your original is never modified.',
+        title: '4. Preview and download',
+        body: 'The protected copy is generated in your browser and offered as a download. Your original is never modified.',
       },
     ],
     howClose: 'Got it',
@@ -301,6 +315,12 @@ export const enStrings: Strings = {
     dropSub: 'or click to choose one',
     supported: 'PDF, JPG, PNG and WebP',
     privacy: 'Your documents never leave this device.',
+    trustLocalTitle: 'Stays on your device',
+    trustLocalBody: 'Nothing is uploaded. No server. No account.',
+    trustNoAccountTitle: 'No history kept',
+    trustNoAccountBody: 'Close the tab and the document is gone.',
+    trustOfflineTitle: 'Works offline',
+    trustOfflineBody: 'You can disconnect the internet and it still works.',
   },
   workspace: {
     pageCount: (n) => `${n} page${n === 1 ? '' : 's'}`,
@@ -495,8 +515,9 @@ export const enStrings: Strings = {
     toastOcrConfident: (label) => `Text confirms ${label}`,
     toastOcrInconclusive: 'No document markers found in the text',
     ocrAnalyze: 'Analyze text',
-    ocrRunning: 'Analyzing text',
-    ocrHint: 'Read the visible text to refine detection. Runs locally, may take a few seconds.',
+    ocrRunning: 'Reading text',
+    ocrLoading: 'Loading local engine',
+    ocrHint: 'Reads the visible text locally to refine detection. First run downloads the engine (~10 MB).',
     protectionSummary: (levelLabel) => `Protection: ${levelLabel}`,
     protectionSummaryMismatch: 'Different from recommended',
     templateSummary: (docLabel, count) =>
@@ -506,15 +527,22 @@ export const enStrings: Strings = {
     tabPlantilla: 'Template',
     tabAvanzado: 'Advanced',
     patternsLabel: 'Patterns',
+    outputFormatLabel: 'Output format',
+    outputFormatPdf: 'Single PDF',
+    outputFormatImages: 'Individual images',
+    outputFormatPdfHint: 'Downloads a single PDF with all pages inside.',
+    outputFormatImagesHint: 'Downloads one PNG per page inside a zip. Useful when you combined the front and back of an ID and want them as separate images.',
     templateEmpty:
       'No template detected for this document. Templates hide known ID fields (number, birth date, signature) automatically. We currently ship DNI, passport and Spanish driving licence.',
     templateEmptyHint:
       'If your image looks like an ID, click Analyze text so BlackLayer reads it and detects the type.',
+    templateQuickPickLabel: 'Or set the type manually',
   },
   result: {
-    ready: 'Your protected copy is ready',
+    ready: 'Protected copy ready',
     readySub: 'Preview it above or download it now.',
     download: 'Download',
+    protectAgain: 'Adjust and protect again',
     originalNote: 'Your original document has not been changed.',
     appliedRecipient: 'Recipient included',
     appliedPurpose: 'Purpose included',
@@ -550,20 +578,20 @@ export const esStrings: Strings = {
     howItWorksSub: 'Cuatro pasos. Todo se procesa en tu dispositivo.',
     howSteps: [
       {
-        title: '1. Arrastra tu documento',
-        body: 'Elige o arrastra un PDF, JPG, PNG o WebP. El archivo se lee directamente en tu dispositivo. No se sube nada.',
+        title: '1. Suelta tu documento',
+        body: 'Elige o arrastra un PDF, JPG, PNG o WebP. El archivo se lee directamente en tu dispositivo.',
       },
       {
-        title: '2. Cuéntanos el contexto',
-        body: 'Indica para quién es esta copia y para qué. BlackLayer construye una marca vinculada a esos datos, y la vista previa se actualiza mientras escribes.',
+        title: '2. BlackLayer identifica el documento',
+        body: 'Para PDFs deduce el tipo del archivo. Para una foto de un documento de identidad, pulsa Analizar texto: se lee en local y se activa la plantilla que tapa por defecto el número, la fecha de nacimiento y la firma.',
       },
       {
-        title: '3. Oculta lo que no necesites compartir',
-        body: 'Dibuja rectángulos sobre lo que el destinatario no necesita ver. Sólido es lo más seguro; desenfoque y pixelado son opciones más débiles.',
+        title: '3. Indica para quién y para qué',
+        body: 'Escribe el destinatario y el motivo. BlackLayer genera una marca visible con esos datos y actualiza la vista previa mientras escribes. También puedes tapar zonas extra con la herramienta sobre el documento.',
       },
       {
-        title: '4. Descarga la copia protegida',
-        body: 'Se genera un archivo nuevo en tu navegador y se te ofrece descargarlo. El original nunca se modifica.',
+        title: '4. Revisa y descarga',
+        body: 'La copia protegida se genera en tu navegador y se te ofrece descargarla. El original nunca se modifica.',
       },
     ],
     howClose: 'Entendido',
@@ -592,6 +620,12 @@ export const esStrings: Strings = {
     dropSub: 'o haz clic para seleccionar uno',
     supported: 'PDF, JPG, PNG y WebP',
     privacy: 'Tus documentos nunca salen de este dispositivo.',
+    trustLocalTitle: 'Todo en tu dispositivo',
+    trustLocalBody: 'No se sube nada. Sin servidor. Sin cuenta.',
+    trustNoAccountTitle: 'No queda historial',
+    trustNoAccountBody: 'Cierras la pestaña y el documento desaparece.',
+    trustOfflineTitle: 'Funciona sin internet',
+    trustOfflineBody: 'Puedes desconectar la red y sigue funcionando.',
   },
   workspace: {
     pageCount: (n) => `${n} página${n === 1 ? '' : 's'}`,
@@ -786,8 +820,9 @@ export const esStrings: Strings = {
     toastOcrConfident: (label) => `El texto confirma ${label}`,
     toastOcrInconclusive: 'No se encontraron marcadores del documento',
     ocrAnalyze: 'Analizar texto',
-    ocrRunning: 'Analizando texto',
-    ocrHint: 'Lee el texto visible para afinar la detección. Se ejecuta en local, puede tardar unos segundos.',
+    ocrRunning: 'Leyendo texto',
+    ocrLoading: 'Cargando motor local',
+    ocrHint: 'Lee el texto visible en local para afinar la detección. La primera vez descarga el motor (~10 MB).',
     protectionSummary: (levelLabel) => `Protección: ${levelLabel}`,
     protectionSummaryMismatch: 'Diferente a la recomendada',
     templateSummary: (docLabel, count) =>
@@ -797,15 +832,22 @@ export const esStrings: Strings = {
     tabPlantilla: 'Plantilla',
     tabAvanzado: 'Avanzado',
     patternsLabel: 'Patrones de seguridad',
+    outputFormatLabel: 'Formato de salida',
+    outputFormatPdf: 'Un solo PDF',
+    outputFormatImages: 'Imágenes por separado',
+    outputFormatPdfHint: 'Descarga un solo PDF con todas las páginas.',
+    outputFormatImagesHint: 'Descarga un PNG por página dentro de un zip. Útil cuando combinaste anverso y reverso de un DNI y quieres tenerlas separadas.',
     templateEmpty:
       'No hay plantilla detectada para este documento. Las plantillas tapan automáticamente los campos conocidos de un documento de identidad (número, fecha de nacimiento, firma). De momento incluimos DNI, pasaporte y permiso de conducir español.',
     templateEmptyHint:
       'Si tu imagen es un documento de identidad, pulsa Analizar texto para que BlackLayer lo lea y detecte el tipo.',
+    templateQuickPickLabel: 'O elige el tipo tú mismo',
   },
   result: {
     ready: 'Tu copia protegida está lista',
     readySub: 'Previsualízala arriba o descárgala ahora.',
     download: 'Descargar',
+    protectAgain: 'Ajustar y volver a proteger',
     originalNote: 'El documento original no ha sido modificado.',
     appliedRecipient: 'Destinatario incluido',
     appliedPurpose: 'Motivo incluido',

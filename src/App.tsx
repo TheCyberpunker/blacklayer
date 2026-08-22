@@ -203,6 +203,11 @@ export function App(): JSX.Element {
   const [customText, setCustomText] = useState('')
   const [docSeed, setDocSeed] = useState<number>(() => generateSeed())
   const [advancedOpen, setAdvancedOpen] = useState(false)
+  // Output format only applies to PDF workspaces. When the loaded doc is an
+  // image, output already matches the input format (JPG/PNG/WebP). For PDFs
+  // (including ones combined from two images via "Add another photo"), the
+  // user can now choose between a single PDF or a zip of PNGs, one per page.
+  const [outputFormat, setOutputFormat] = useState<'pdf' | 'images'>('pdf')
   const [crosshatchOverride, setCrosshatchOverride] = useState<boolean | null>(null)
   const [frameOverride, setFrameOverride] = useState<boolean | null>(null)
   const [iridescentOverride, setIridescentOverride] = useState<boolean | null>(null)
@@ -219,6 +224,7 @@ export function App(): JSX.Element {
   const [adjusting, setAdjusting] = useState(false)
   const [ocrRunning, setOcrRunning] = useState(false)
   const [ocrProgress, setOcrProgress] = useState(0)
+  const [ocrPhase, setOcrPhase] = useState<'loading' | 'analyzing'>('loading')
   // Image adjustments live as flags on top of an immutable original file.
   // Every toggle re-derives the working file from the original, so grayscale is
   // reversible and rotations always start from the same base.
@@ -466,6 +472,18 @@ export function App(): JSX.Element {
             const { detectDocument } = await import('./core/detect/detect.ts')
             const result = await detectDocument(f, base)
             setDetection(result)
+            // Warm up the OCR runtime for image documents so the first
+            // Analyze-text click doesn't pay the ~800 KB module download.
+            if (kind === 'image' && result.confidence !== 'high') {
+              const idle = (window as unknown as { requestIdleCallback?: (cb: () => void) => void })
+                .requestIdleCallback
+              const warm = async () => {
+                const { preloadOcr } = await import('./core/ocr/ocr.ts')
+                preloadOcr()
+              }
+              if (idle) idle(() => void warm())
+              else window.setTimeout(() => void warm(), 400)
+            }
           } catch {
             setDetection(UNKNOWN_DETECTION)
           }
@@ -765,26 +783,36 @@ export function App(): JSX.Element {
   }, [clearPresets, setTheme, setLang, t, confirmAction, pushToast])
 
   const runOcrDetection = useCallback(async () => {
-    if (!loaded || loaded.kind !== 'image' || ocrRunning) return
+    if (!loaded || ocrRunning) return
+    // For PDFs we need a rendered page bitmap: OCR the currently visible page.
+    if (loaded.kind === 'pdf' && !activePage) return
     setOcrRunning(true)
     setOcrProgress(0)
     try {
-      const { runOcr } = await import('./core/ocr/ocr.ts')
+      const { runOcr, runOcrOnBitmap } = await import('./core/ocr/ocr.ts')
       const { detectFromOcrText } = await import('./core/detect/detect.ts')
-      const result = await runOcr(loaded.file, lang, (p) => {
+      const onProgress = (p: { status: string; progress: number }) => {
         // Two phases fire status callbacks: "loading language traineddata"
         // (0..1) and "recognizing text" (0..1). Splice into a single 0..1
-        // bar so the user always sees motion.
+        // bar so the user always sees motion. Track the phase so the UI can
+        // switch label between "downloading engine" and "analyzing text".
         if (p.status === 'loading language traineddata') {
+          setOcrPhase('loading')
           setOcrProgress(Math.max(0, Math.min(0.5, p.progress * 0.5)))
         } else if (p.status === 'recognizing text') {
+          setOcrPhase('analyzing')
           setOcrProgress(Math.max(0.5, Math.min(1, 0.5 + p.progress * 0.5)))
         } else if (typeof p.progress === 'number' && p.progress > 0) {
-          // Any other phase (initializing, loading core…) bumps the bar a bit
-          // so it never sits at 0 for long.
           setOcrProgress((prev) => Math.max(prev, Math.min(0.15, p.progress)))
         }
-      })
+      }
+      let result: { text: string; confidence: number }
+      if (loaded.kind === 'image') {
+        result = await runOcr(loaded.file, lang, onProgress)
+      } else {
+        const cacheBase = `${loaded.file.name}:${loaded.file.size}:${loaded.file.lastModified}:${activePageIndex}`
+        result = await runOcrOnBitmap(activePage!.bitmap, cacheBase, lang, onProgress)
+      }
       const next = detectFromOcrText(detection, result.text)
       setDetection(next)
       pushToast(
@@ -798,8 +826,9 @@ export function App(): JSX.Element {
     } finally {
       setOcrRunning(false)
       setOcrProgress(0)
+      setOcrPhase('loading')
     }
-  }, [loaded, ocrRunning, lang, detection, pushToast, t])
+  }, [loaded, ocrRunning, activePage, activePageIndex, lang, detection, pushToast, t])
 
   const overrideDetection = useCallback((type: DocumentType) => {
     setDetection((prev) => {
@@ -850,6 +879,7 @@ export function App(): JSX.Element {
         },
       )
       let blob: Blob
+      let outputName: string
       if (loaded.kind === 'pdf') {
         const buf = await loaded.file.arrayBuffer()
         const activeMap = new Map<number, readonly RedactionRect[]>()
@@ -863,7 +893,28 @@ export function App(): JSX.Element {
           lang,
           redactionsByPage: activeMap.size ? activeMap : undefined,
         })
-        blob = new Blob([bytes as unknown as ArrayBuffer], { type: 'application/pdf' })
+        if (outputFormat === 'images') {
+          // Render each page of the protected PDF as PNG and pack into a zip.
+          // Useful when the user combined front+back photos of an ID and now
+          // wants two independent images back rather than a single 2-page PDF.
+          const [{ rasterizeAllPagesToPng }, { zipSync }] = await Promise.all([
+            import('./core/pdf/rasterize-all.ts'),
+            import('fflate'),
+          ])
+          const pages = await rasterizeAllPagesToPng(new Uint8Array(bytes))
+          const dot = loaded.file.name.lastIndexOf('.')
+          const base = dot >= 0 ? loaded.file.name.slice(0, dot) : loaded.file.name
+          const zipInput: Record<string, Uint8Array> = {}
+          pages.forEach((png, i) => {
+            zipInput[`${base}-${String(i + 1).padStart(2, '0')}-blacklayer.png`] = new Uint8Array(png)
+          })
+          const zipBytes = zipSync(zipInput)
+          blob = new Blob([zipBytes as unknown as ArrayBuffer], { type: 'application/zip' })
+          outputName = `${base}-blacklayer.zip`
+        } else {
+          blob = new Blob([bytes as unknown as ArrayBuffer], { type: 'application/pdf' })
+          outputName = suggestOutputName(loaded.file.name, loaded.kind)
+        }
       } else {
         const outType =
           loaded.file.type === 'image/jpeg'
@@ -880,18 +931,19 @@ export function App(): JSX.Element {
           redactions: imageRects,
           outputType: outType,
         })
+        outputName = suggestOutputName(loaded.file.name, loaded.kind)
       }
       clearOutput()
       const url = URL.createObjectURL(blob)
       setOutputUrl(url)
-      setOutputName(suggestOutputName(loaded.file.name, loaded.kind))
+      setOutputName(outputName)
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err)
       setError(`${t.errors.failed}: ${msg}`)
     } finally {
       setWorking(false)
     }
-  }, [loaded, level, recipient, purpose, lang, customEnabled, customText, redactionsByPage, docSeed, crosshatchOverride, frameOverride, iridescentOverride, guillocheOverride, moireOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride, t, clearOutput])
+  }, [loaded, level, recipient, purpose, lang, customEnabled, customText, redactionsByPage, docSeed, crosshatchOverride, frameOverride, iridescentOverride, guillocheOverride, moireOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride, t, clearOutput, outputFormat])
 
   const protectBatch = useCallback(async () => {
     if (!batch.length) return
@@ -1783,6 +1835,7 @@ export function App(): JSX.Element {
             onAnalyzeText={runOcrDetection}
             ocrRunning={ocrRunning}
             ocrProgress={ocrProgress}
+            ocrPhase={ocrPhase}
             onApplyRecommended={applyRecommendedLevel}
             onLevelChange={setLevelManual}
             onRecipient={setRecipient}
@@ -1848,6 +1901,9 @@ export function App(): JSX.Element {
             onDeleteAllLocalSettings={onDeleteAllLocalSettings}
             canSavePreset={!!recipient.trim() || !!purpose.trim()}
             onOutputNameChange={setOutputName}
+            onClearOutput={clearOutput}
+            outputFormat={outputFormat}
+            onOutputFormatChange={setOutputFormat}
             customEnabled={customEnabled}
             customText={customText}
             onToggleCustom={() => {
@@ -2204,7 +2260,7 @@ function HeroDrop({
         onDragLeave={onDragLeave}
         className={cn(
           'mt-10 group block cursor-pointer rounded-2xl border-2 border-dashed transition-colors',
-          'px-6 py-16 sm:py-20',
+          'px-6 py-14 sm:py-16',
           dragActive
             ? 'border-foreground bg-muted/60'
             : 'border-border hover:border-foreground/40 hover:bg-muted/30',
@@ -2231,12 +2287,34 @@ function HeroDrop({
         />
       </label>
 
-      <div className="mt-6 flex items-center justify-center gap-4 text-xs text-muted-foreground flex-wrap">
-        <span className="inline-flex items-center gap-1.5">
-          <Shield className="h-3 w-3" />
-          {strings.hero.privacy}
-        </span>
-        <span aria-hidden="true">·</span>
+      {/* Trust row: three concrete promises. Non-technical users need to
+          understand this doesn't send their document anywhere before they
+          dare drop it. Keep to three, keep the icons monochrome. */}
+      <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-3 text-left">
+        <div className="flex items-start gap-2.5 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5">
+          <Shield className="h-4 w-4 shrink-0 mt-0.5 text-foreground/70" />
+          <div>
+            <p className="text-xs font-medium text-foreground">{strings.hero.trustLocalTitle}</p>
+            <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">{strings.hero.trustLocalBody}</p>
+          </div>
+        </div>
+        <div className="flex items-start gap-2.5 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5">
+          <Eraser className="h-4 w-4 shrink-0 mt-0.5 text-foreground/70" />
+          <div>
+            <p className="text-xs font-medium text-foreground">{strings.hero.trustNoAccountTitle}</p>
+            <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">{strings.hero.trustNoAccountBody}</p>
+          </div>
+        </div>
+        <div className="flex items-start gap-2.5 rounded-lg border border-border/60 bg-muted/20 px-3 py-2.5">
+          <ShieldCheck className="h-4 w-4 shrink-0 mt-0.5 text-foreground/70" />
+          <div>
+            <p className="text-xs font-medium text-foreground">{strings.hero.trustOfflineTitle}</p>
+            <p className="text-[11px] text-muted-foreground leading-snug mt-0.5">{strings.hero.trustOfflineBody}</p>
+          </div>
+        </div>
+      </div>
+
+      <div className="mt-4 flex items-center justify-center gap-4 text-xs text-muted-foreground flex-wrap">
         <button
           type="button"
           onClick={onOpenHow}
@@ -2279,6 +2357,7 @@ interface WorkspaceProps {
   onAnalyzeText: () => void
   ocrRunning: boolean
   ocrProgress: number
+  ocrPhase: 'loading' | 'analyzing'
   onApplyRecommended: () => void
   onLevelChange: (l: ProtectionLevel) => void
   onRecipient: (v: string) => void
@@ -2339,6 +2418,9 @@ interface WorkspaceProps {
   onDeleteAllLocalSettings: () => void
   canSavePreset: boolean
   onOutputNameChange: (v: string) => void
+  onClearOutput: () => void
+  outputFormat: 'pdf' | 'images'
+  onOutputFormatChange: (v: 'pdf' | 'images') => void
   customEnabled: boolean
   customText: string
   onToggleCustom: () => void
@@ -2398,6 +2480,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     onAnalyzeText,
     ocrRunning,
     ocrProgress,
+    ocrPhase,
     onApplyRecommended,
     onLevelChange,
     onRecipient,
@@ -2458,6 +2541,9 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     onDeleteAllLocalSettings,
     canSavePreset,
     onOutputNameChange,
+    onClearOutput,
+    outputFormat,
+    onOutputFormatChange,
     customEnabled,
     customText,
     onToggleCustom,
@@ -2508,8 +2594,10 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-8 animate-fade-in">
       {/* Preview */}
       <section className="min-w-0">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2 text-sm min-w-0">
+        {/* Single meta row: file identity + detection + OCR + clear. Merged
+            from two rows to give the canvas more vertical real estate. */}
+        <div className="mb-3 flex items-center gap-3 flex-wrap">
+          <div className="flex items-center gap-2 text-sm min-w-0 max-w-full">
             {loaded.kind === 'pdf' ? (
               <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
             ) : (
@@ -2523,21 +2611,13 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               {strings.workspace.fileSize(sizeKb)}
             </span>
           </div>
-          <Button variant="ghost" size="sm" onClick={onClear}>
-            <X className="h-4 w-4" />
-            {strings.workspace.clear}
-          </Button>
-        </div>
-
-        <div className="mb-3 flex items-center gap-2 flex-wrap">
           <DetectionBadge
             detection={detection}
             strings={strings}
             onOverride={onOverrideDetection}
             inline
           />
-          {loaded.kind === 'image' &&
-            !detection.manual &&
+          {!detection.manual &&
             detection.confidence !== 'high' && (
               <Tooltip>
                 <TooltipTrigger asChild>
@@ -2550,16 +2630,27 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                   >
                     <ScanText className="h-3.5 w-3.5" />
                     {ocrRunning
-                      ? `${strings.workspace.ocrRunning}${ocrProgress > 0 ? ` ${Math.round(ocrProgress * 100)}%` : ''}`
+                      ? `${ocrPhase === 'loading' ? strings.workspace.ocrLoading : strings.workspace.ocrRunning}${ocrProgress > 0 ? ` ${Math.round(ocrProgress * 100)}%` : ''}`
                       : strings.workspace.ocrAnalyze}
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent>{strings.workspace.ocrHint}</TooltipContent>
               </Tooltip>
             )}
+          <Button variant="ghost" size="sm" onClick={onClear} className="ml-auto">
+            <X className="h-4 w-4" />
+            {strings.workspace.clear}
+          </Button>
         </div>
 
-        {addAnotherPromptOpen && loaded.kind === 'image' && loaded.base.totalPages === 1 && (
+        {addAnotherPromptOpen &&
+          loaded.kind === 'image' &&
+          loaded.base.totalPages === 1 &&
+          // Only surface the "add another photo" prompt when the loaded doc
+          // is likely an identity card with a front and a back side. Passports
+          // are a single data page, invoices are one photo, etc. Otherwise
+          // this reads as noise.
+          (detection.type === 'identity' || detection.type === 'driving_licence') && (
           <div className="mb-3 rounded-lg border border-foreground/60 bg-foreground/5 p-3 flex flex-wrap items-center justify-between gap-3 animate-fade-in">
             <p className="text-sm">
               {strings.workspace.addAnotherPromptTitle}
@@ -2935,6 +3026,85 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           />
         </div>
 
+        {outputUrl ? (
+          // Post-Protect success view. Replaces the tabs+CTA so the moment of
+          // "your protected copy is ready" gets the full sidebar. Keeps the
+          // Presets row above intact.
+          <div className="space-y-4 animate-fade-in">
+            <div className="flex items-start gap-3 rounded-xl border border-foreground/20 bg-foreground/[0.03] p-4">
+              <div className="mt-0.5 h-8 w-8 shrink-0 rounded-full bg-foreground text-background flex items-center justify-center">
+                <Check className="h-4 w-4" />
+              </div>
+              <div className="min-w-0 flex-1">
+                <p className="text-base font-semibold text-foreground leading-tight">
+                  {strings.result.ready}
+                </p>
+                <p className="text-xs text-muted-foreground mt-1 leading-relaxed">
+                  {strings.result.readySub}
+                </p>
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <Label htmlFor="download-name">{strings.workspace.downloadNameLabel}</Label>
+              <Input
+                id="download-name"
+                value={outputName}
+                onChange={(e) => onOutputNameChange(e.target.value)}
+                autoComplete="off"
+                spellCheck={false}
+                className="font-mono text-xs"
+              />
+            </div>
+
+            <a
+              href={outputUrl}
+              download={(outputName && outputName.trim()) || undefined}
+              className={cn(
+                'inline-flex w-full items-center justify-center gap-2 h-12 px-4',
+                'rounded-md bg-primary text-primary-foreground text-sm font-semibold',
+                'hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
+              )}
+            >
+              <Download className="h-4 w-4" />
+              {strings.result.download}
+            </a>
+
+            <div className="rounded-lg border border-border bg-muted/30 p-3">
+              <ul className="text-xs text-muted-foreground space-y-1">
+                <AppliedItem>{strings.result.appliedRecipient}</AppliedItem>
+                <AppliedItem>{strings.result.appliedPurpose}</AppliedItem>
+                <AppliedItem>
+                  {level === 'basic' ? strings.result.appliedSingle : strings.result.appliedTiled}
+                </AppliedItem>
+                {previewMetadataMode === 'neutralize' && (
+                  <AppliedItem>{strings.result.appliedMetadata}</AppliedItem>
+                )}
+                {crosshatchOn && <AppliedItem>{strings.workspace.appliedCrosshatch}</AppliedItem>}
+                {frameOn && <AppliedItem>{strings.workspace.appliedFrame}</AppliedItem>}
+                {iridescentOn && <AppliedItem>{strings.workspace.appliedIridescent}</AppliedItem>}
+                {guillocheOn && <AppliedItem>{strings.workspace.appliedGuilloche}</AppliedItem>}
+                {moireOn && <AppliedItem>{strings.workspace.appliedMoire}</AppliedItem>}
+                {redactionsCount > 0 && (
+                  <AppliedItem>{strings.result.appliedRedactions(redactionsCount)}</AppliedItem>
+                )}
+                <AppliedItem>{strings.result.appliedLocalOnly}</AppliedItem>
+              </ul>
+            </div>
+
+            <div className="flex items-center justify-between pt-1 text-xs">
+              <p className="text-muted-foreground">{strings.result.originalNote}</p>
+            </div>
+            <button
+              type="button"
+              onClick={onClearOutput}
+              className="w-full text-xs text-muted-foreground hover:text-foreground transition-colors underline-offset-2 hover:underline"
+            >
+              {strings.result.protectAgain}
+            </button>
+          </div>
+        ) : (
+        <>
         {/* Tab strip. All tabs sit here, only the active one's content renders below. */}
         <div role="tablist" aria-label="Ajustes del documento" className="grid grid-cols-4 gap-1 p-1 rounded-md bg-muted">
           {([
@@ -3064,7 +3234,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             // Empty state: no template because either detection is weak or the
             // document type doesn't have one shipped. Guide the user rather
             // than gating the tab.
-            const canRunOcr = loaded.kind === 'image' && !ocrRunning
+            const canRunOcr = !ocrRunning
             return (
               <div className="space-y-3 rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
                 <div className="flex items-start gap-2">
@@ -3084,6 +3254,38 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                     {strings.workspace.ocrAnalyze}
                   </Button>
                 )}
+                {/* Manual quick-picks. Works for PDFs too (where OCR is not
+                    wired yet) and for images where OCR was inconclusive. Each
+                    button flips detection.manual so templateFor unlocks the
+                    matching template. */}
+                <div className="pt-1 space-y-1.5">
+                  <p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground/80">
+                    {strings.workspace.templateQuickPickLabel}
+                  </p>
+                  <div className="flex flex-wrap gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => onOverrideDetection('identity')}
+                      className="text-xs px-2.5 py-1 rounded-full border border-border hover:border-foreground/50 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {strings.workspace.detectionSubtypeDni}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onOverrideDetection('passport')}
+                      className="text-xs px-2.5 py-1 rounded-full border border-border hover:border-foreground/50 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {strings.workspace.detectionSubtypePassport}
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => onOverrideDetection('driving_licence')}
+                      className="text-xs px-2.5 py-1 rounded-full border border-border hover:border-foreground/50 text-muted-foreground hover:text-foreground transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      {strings.workspace.detectionSubtypeDrivingLicence}
+                    </button>
+                  </div>
+                </div>
                 <p className="text-[11px] text-muted-foreground/80">
                   {strings.workspace.templateEmptyHint}
                 </p>
@@ -3093,6 +3295,52 @@ function Workspace(props: WorkspaceProps): JSX.Element {
 
           {sidebarTab === 'avanzado' && (
             <section className="space-y-4" aria-label={strings.workspace.tabAvanzado}>
+              {loaded.kind === 'pdf' && (
+                <div className="space-y-1.5">
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+                    {strings.workspace.outputFormatLabel}
+                  </span>
+                  <div
+                    role="radiogroup"
+                    aria-label={strings.workspace.outputFormatLabel}
+                    className="grid grid-cols-2 gap-1 p-1 rounded-md bg-muted"
+                  >
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={outputFormat === 'pdf'}
+                      onClick={() => onOutputFormatChange('pdf')}
+                      className={cn(
+                        'h-8 text-xs font-medium rounded transition-colors',
+                        outputFormat === 'pdf'
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {strings.workspace.outputFormatPdf}
+                    </button>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={outputFormat === 'images'}
+                      onClick={() => onOutputFormatChange('images')}
+                      className={cn(
+                        'h-8 text-xs font-medium rounded transition-colors',
+                        outputFormat === 'images'
+                          ? 'bg-background text-foreground shadow-sm'
+                          : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {strings.workspace.outputFormatImages}
+                    </button>
+                  </div>
+                  <p className="text-[11px] text-muted-foreground/80 leading-snug">
+                    {outputFormat === 'images'
+                      ? strings.workspace.outputFormatImagesHint
+                      : strings.workspace.outputFormatPdfHint}
+                  </p>
+                </div>
+              )}
               <StyleSliders
                 opacity={opacity}
                 rotationDeg={rotationDeg}
@@ -3169,60 +3417,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
         </Button>
 
         {error && <p className="text-sm text-destructive">{error}</p>}
-
-        {outputUrl && (
-          <div className="rounded-xl border border-border bg-muted/40 p-4 space-y-3 animate-fade-in">
-            <div>
-              <p className="text-sm font-semibold">{strings.result.ready}</p>
-              <p className="text-xs text-muted-foreground mt-0.5">{strings.result.readySub}</p>
-            </div>
-            <div className="space-y-1.5">
-              <Label htmlFor="download-name">{strings.workspace.downloadNameLabel}</Label>
-              <Input
-                id="download-name"
-                value={outputName}
-                onChange={(e) => onOutputNameChange(e.target.value)}
-                autoComplete="off"
-                spellCheck={false}
-                className="font-mono text-xs"
-              />
-              <p className="text-[11px] text-muted-foreground">{strings.workspace.downloadNameHint}</p>
-            </div>
-            <a
-              href={outputUrl}
-              download={(outputName && outputName.trim()) || undefined}
-              className={cn(
-                'inline-flex w-full items-center justify-center gap-2 h-10 px-4',
-                'rounded-md bg-primary text-primary-foreground text-sm font-medium',
-                'hover:bg-primary/90 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background',
-              )}
-            >
-              <Download className="h-4 w-4" />
-              {strings.result.download}
-            </a>
-            <ul className="text-xs text-muted-foreground space-y-1 pt-1">
-              <AppliedItem>{strings.result.appliedRecipient}</AppliedItem>
-              <AppliedItem>{strings.result.appliedPurpose}</AppliedItem>
-              <AppliedItem>
-                {level === 'basic' ? strings.result.appliedSingle : strings.result.appliedTiled}
-              </AppliedItem>
-              {previewMetadataMode === 'neutralize' && (
-                <AppliedItem>{strings.result.appliedMetadata}</AppliedItem>
-              )}
-              {crosshatchOn && <AppliedItem>{strings.workspace.appliedCrosshatch}</AppliedItem>}
-              {frameOn && <AppliedItem>{strings.workspace.appliedFrame}</AppliedItem>}
-              {iridescentOn && <AppliedItem>{strings.workspace.appliedIridescent}</AppliedItem>}
-              {guillocheOn && <AppliedItem>{strings.workspace.appliedGuilloche}</AppliedItem>}
-              {moireOn && <AppliedItem>{strings.workspace.appliedMoire}</AppliedItem>}
-              {redactionsCount > 0 && (
-                <AppliedItem>{strings.result.appliedRedactions(redactionsCount)}</AppliedItem>
-              )}
-              <AppliedItem>{strings.result.appliedLocalOnly}</AppliedItem>
-            </ul>
-            <p className="text-[11px] text-muted-foreground pt-1 border-t border-border/60">
-              {strings.result.originalNote}
-            </p>
-          </div>
+        </>
         )}
       </aside>
     </div>
