@@ -105,10 +105,6 @@ Rough shape of what is planned. Nothing here is a commitment; priorities move as
 - Any feature that requires a user account.
 - Any feature that transmits document contents to a third party.
 
-## Contributing
-
-Contributions welcome. Please open an issue before large changes so the shape can be discussed. Do not include real personal data in issues, screenshots, or fixtures. Fictional samples only.
-
 ## License and attributions
 
 MIT. See [LICENSE](LICENSE).
