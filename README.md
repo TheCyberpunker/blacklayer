@@ -13,6 +13,14 @@
 
 <p align="center"><em>Drop a document, name the recipient and the purpose, and BlackLayer bakes a repeated watermark into the pixels together with an optional security pattern. Metadata is stripped in the same pass. Everything runs in your browser — nothing is uploaded.</em></p>
 
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=TnKzfRlxc3s">
+    <img src="https://img.youtube.com/vi/TnKzfRlxc3s/maxresdefault.jpg" alt="Watch the BlackLayer walkthrough on YouTube" width="720">
+  </a>
+</p>
+
+<p align="center"><em>Two-minute walkthrough on YouTube: dropping a document, filling recipient and purpose, redacting extra areas, and downloading the protected copy.</em></p>
+
 # BlackLayer
 
 **English.** Local-first document protection for safer sharing. Add purpose-bound watermarks, redact sensitive areas, remove hidden metadata, and export protected PDFs or images entirely on your device. No uploads, no accounts, no cloud.

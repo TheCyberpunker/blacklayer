@@ -2,6 +2,16 @@
 
 Screenshots of BlackLayer running locally on a sample Spanish DNI. Every step happens in the browser; nothing is uploaded.
 
+## Video walkthrough
+
+<p align="center">
+  <a href="https://www.youtube.com/watch?v=TnKzfRlxc3s">
+    <img src="https://img.youtube.com/vi/TnKzfRlxc3s/maxresdefault.jpg" alt="Watch the BlackLayer walkthrough on YouTube" width="720">
+  </a>
+</p>
+
+Two-minute walkthrough on YouTube covering the whole flow the screenshots below break down: dropping a document, filling recipient and purpose, choosing the protection level, drawing manual redactions, and downloading the protected copy.
+
 ## 1. Compare original and maximum protection
 
 ![Side-by-side comparison of the original DNI and the copy protected at the maximum level, with recipient and purpose watermarked across the page](./01-compare-maximum.png)
