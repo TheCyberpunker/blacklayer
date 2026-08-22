@@ -1730,7 +1730,7 @@ export function App(): JSX.Element {
           onOpenPrivacy={() => setPrivacyOpen(true)}
         />
 
-        <main id="main" className="flex-1 w-full max-w-6xl mx-auto px-6 pt-6 pb-24 lg:pb-16">
+        <main id="main" className="flex-1 w-full max-w-7xl 2xl:max-w-[1440px] mx-auto px-6 pt-6 pb-24 lg:pb-16">
         {!loaded && !loading && batch.length === 0 && (
           <HeroDrop
             dragActive={dragActive}
@@ -1960,7 +1960,7 @@ export function App(): JSX.Element {
       </main>
 
       <footer className="border-t border-border/60">
-        <div className="max-w-6xl mx-auto px-6 py-6 flex items-center justify-between text-xs text-muted-foreground gap-3 flex-wrap">
+        <div className="max-w-7xl 2xl:max-w-[1440px] mx-auto px-6 py-6 flex items-center justify-between text-xs text-muted-foreground gap-3 flex-wrap">
           <span className="font-mono tracking-tight">BlackLayer</span>
           <div className="flex items-center gap-4">
             <button
@@ -2045,7 +2045,7 @@ function Header({
 }: HeaderProps): JSX.Element {
   return (
     <header className="border-b border-border/60 backdrop-blur supports-[backdrop-filter]:bg-background/70 sticky top-0 z-40">
-      <div className="max-w-6xl mx-auto px-6 h-14 flex items-center justify-between gap-4">
+      <div className="max-w-7xl 2xl:max-w-[1440px] mx-auto px-6 h-14 flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <span className="text-lg font-bold tracking-tight">BlackLayer</span>
           <span className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-mono uppercase tracking-wider text-muted-foreground border border-border/60 rounded px-2 py-0.5">
@@ -2591,7 +2591,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('copia')
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-8 animate-fade-in">
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px] xl:grid-cols-[minmax(0,1fr)_460px] gap-8 xl:gap-10 animate-fade-in">
       {/* Preview */}
       <section className="min-w-0">
         {/* Single meta row: file identity + detection + OCR + clear. Merged
@@ -3685,7 +3685,7 @@ function BatchWorkspace(props: BatchWorkspaceProps): JSX.Element {
   const canZip = doneCount > 0 && !anyProcessing
 
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-8 animate-fade-in">
+    <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px] xl:grid-cols-[minmax(0,1fr)_460px] gap-8 xl:gap-10 animate-fade-in">
       <section className="min-w-0">
         <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
           <div className="flex items-center gap-2 text-sm">
