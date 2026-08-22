@@ -19,6 +19,12 @@ export interface WavyPageArgs {
   seed: number
   /** Base rotation of the whole pattern, degrees. */
   baseRotationDeg: number
+  /**
+   * 0..1. 1 = current sinusoidal look. 0 = flat rows (straight diagonal tile).
+   * Anything in between scales both wave amplitude and inter-row breathing so
+   * rows never visually overlap even at max waviness.
+   */
+  waviness?: number
 }
 
 export function drawWavyPage({
@@ -31,6 +37,7 @@ export function drawWavyPage({
   color,
   seed,
   baseRotationDeg,
+  waviness = 1,
 }: WavyPageArgs): void {
   ctx.save()
   ctx.translate(width / 2, height / 2)
@@ -45,9 +52,13 @@ export function drawWavyPage({
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
 
-  const rowGap = fontSize * 2.8
-  const amplitude = fontSize * 1.0
-  const wavelength = Math.max(fontSize * 7, width * 0.45)
+  // rowGap must always leave at least one fontSize of clear space between the
+  // furthest reach of adjacent rows, even at max waviness. Previous constants
+  // (rowGap 2.8, amplitude 1.0) left only 0.8 fontSize and the peaks touched.
+  const w = Math.max(0, Math.min(1, waviness))
+  const amplitude = fontSize * (0.55 * w)
+  const rowGap = fontSize * (2.4 + w * 1.4)
+  const wavelength = Math.max(fontSize * 8, width * 0.55)
   const omega = (2 * Math.PI) / wavelength
   const rng = mulberry32(seed || 1)
 

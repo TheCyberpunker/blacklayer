@@ -52,6 +52,7 @@ export function drawWatermarkOnCanvas({
         color: colorBase,
         seed: options.seed,
         baseRotationDeg: options.rotationDeg,
+        waviness: options.waviness,
       })
     } else {
       // Single centered mark: keep the readable large text used by "Basic".

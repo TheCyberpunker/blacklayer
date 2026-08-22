@@ -239,6 +239,7 @@ export function App(): JSX.Element {
   const [opacityOverride, setOpacityOverride] = useState<number | null>(null)
   const [rotationOverride, setRotationOverride] = useState<number | null>(null)
   const [fontSizeOverride, setFontSizeOverride] = useState<number | null>(null)
+  const [wavinessOverride, setWavinessOverride] = useState<number | null>(null)
   const [colorOverride, setColorOverride] = useState<string | null>(null)
   const [redactSolidColor, setRedactSolidColor] = useState<string>('#000000')
   const [searchQuery, setSearchQuery] = useState('')
@@ -423,6 +424,7 @@ export function App(): JSX.Element {
           opacity: opacityOverride ?? undefined,
           rotationDeg: rotationOverride ?? undefined,
           fontSize: fontSizeOverride ?? undefined,
+          waviness: wavinessOverride ?? undefined,
           color: colorOverride ? hexToRgb01(colorOverride) : undefined,
           metadataMode: metadataModeOverride ?? undefined,
           metadataCustom: metadataModeOverride === 'custom'
@@ -438,7 +440,7 @@ export function App(): JSX.Element {
             : undefined,
         },
       ),
-    [level, debouncedRecipient, debouncedPurpose, lang, effectiveCustom, docSeed, crosshatchOverride, frameOverride, iridescentOverride, guillocheOverride, moireOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride, metadataModeOverride, metadataCustom],
+    [level, debouncedRecipient, debouncedPurpose, lang, effectiveCustom, docSeed, crosshatchOverride, frameOverride, iridescentOverride, guillocheOverride, moireOverride, opacityOverride, rotationOverride, fontSizeOverride, wavinessOverride, colorOverride, metadataModeOverride, metadataCustom],
   )
 
   const activePageRedactions = redactionsByPage.get(activePageIndex) ?? []
@@ -976,6 +978,7 @@ export function App(): JSX.Element {
           opacity: opacityOverride ?? undefined,
           rotationDeg: rotationOverride ?? undefined,
           fontSize: fontSizeOverride ?? undefined,
+          waviness: wavinessOverride ?? undefined,
           color: colorOverride ? hexToRgb01(colorOverride) : undefined,
           metadataMode: metadataModeOverride ?? undefined,
           metadataCustom: metadataModeOverride === 'custom'
@@ -1056,7 +1059,7 @@ export function App(): JSX.Element {
     } finally {
       setWorking(false)
     }
-  }, [loaded, level, recipient, purpose, lang, customEnabled, customText, redactionsByPage, docSeed, crosshatchOverride, frameOverride, iridescentOverride, guillocheOverride, moireOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride, t, clearOutput, outputFormat, metadataModeOverride, metadataCustom])
+  }, [loaded, level, recipient, purpose, lang, customEnabled, customText, redactionsByPage, docSeed, crosshatchOverride, frameOverride, iridescentOverride, guillocheOverride, moireOverride, opacityOverride, rotationOverride, fontSizeOverride, wavinessOverride, colorOverride, t, clearOutput, outputFormat, metadataModeOverride, metadataCustom])
 
   const protectBatch = useCallback(async () => {
     if (!batch.length) return
@@ -1970,11 +1973,14 @@ export function App(): JSX.Element {
             onOpacityChange={setOpacityOverride}
             onRotationChange={setRotationOverride}
             onFontSizeChange={setFontSizeOverride}
+            waviness={previewProfile.watermark.waviness}
+            onWavinessChange={setWavinessOverride}
             onColorChange={setColorOverride}
             onResetStyle={() => {
               setOpacityOverride(null)
               setRotationOverride(null)
               setFontSizeOverride(null)
+              setWavinessOverride(null)
               setColorOverride(null)
             }}
             redactSolidColor={redactSolidColor}
@@ -2597,6 +2603,8 @@ interface WorkspaceProps {
   onOpacityChange: (v: number) => void
   onRotationChange: (v: number) => void
   onFontSizeChange: (v: number) => void
+  waviness: number
+  onWavinessChange: (v: number) => void
   onColorChange: (v: string) => void
   onResetStyle: () => void
   redactSolidColor: string
@@ -2729,6 +2737,8 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     onOpacityChange,
     onRotationChange,
     onFontSizeChange,
+    waviness,
+    onWavinessChange,
     onColorChange,
     onResetStyle,
     redactSolidColor,
@@ -3660,10 +3670,12 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                 opacity={opacity}
                 rotationDeg={rotationDeg}
                 fontSize={fontSize}
+                waviness={waviness}
                 colorHex={colorHex}
                 onOpacity={onOpacityChange}
                 onRotation={onRotationChange}
                 onFontSize={onFontSizeChange}
+                onWaviness={onWavinessChange}
                 onColor={onColorChange}
                 onReset={onResetStyle}
                 strings={strings}
@@ -5009,10 +5021,12 @@ function StyleSliders({
   opacity,
   rotationDeg,
   fontSize,
+  waviness,
   colorHex,
   onOpacity,
   onRotation,
   onFontSize,
+  onWaviness,
   onColor,
   onReset,
   strings,
@@ -5020,10 +5034,12 @@ function StyleSliders({
   opacity: number
   rotationDeg: number
   fontSize: number
+  waviness: number
   colorHex: string
   onOpacity: (v: number) => void
   onRotation: (v: number) => void
   onFontSize: (v: number) => void
+  onWaviness: (v: number) => void
   onColor: (v: string) => void
   onReset: () => void
   strings: Strings
@@ -5066,6 +5082,15 @@ function StyleSliders({
         step={1}
         formatValue={(v) => `${Math.round(v)}pt`}
         onChange={onFontSize}
+      />
+      <SliderRow
+        label={strings.workspace.styleWaviness}
+        value={waviness}
+        min={0}
+        max={1}
+        step={0.05}
+        formatValue={(v) => `${Math.round(v * 100)}%`}
+        onChange={onWaviness}
       />
       <label className="flex items-center justify-between">
         <span className="text-xs text-foreground">{strings.workspace.styleColor}</span>

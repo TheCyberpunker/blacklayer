@@ -160,6 +160,7 @@ export interface Strings {
     styleOpacity: string
     styleRotation: string
     styleFontSize: string
+    styleWaviness: string
     styleReset: string
     styleColor: string
     redactSolidColor: string
@@ -473,6 +474,7 @@ export const enStrings: Strings = {
     styleOpacity: 'Opacity',
     styleRotation: 'Rotation',
     styleFontSize: 'Text size',
+    styleWaviness: 'Waviness',
     styleReset: 'Reset',
     styleColor: 'Color',
     redactSolidColor: 'Fill color',
@@ -794,6 +796,7 @@ export const esStrings: Strings = {
     styleOpacity: 'Opacidad',
     styleRotation: 'Rotación',
     styleFontSize: 'Tamaño de texto',
+    styleWaviness: 'Ondulación',
     styleReset: 'Restablecer',
     styleColor: 'Color',
     redactSolidColor: 'Color de relleno',

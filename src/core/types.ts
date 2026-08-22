@@ -66,6 +66,12 @@ export interface WatermarkOptions {
    * stay at or below ~0.6 to avoid the "smeared" look.
    */
   jitter: number
+  /**
+   * 0..1. Controls the sinusoidal amplitude of the wavy microtext. 1 keeps
+   * the security-print curves; 0 turns rows into a straight diagonal tile.
+   * Only meaningful when tile === true.
+   */
+  waviness: number
   patterns: {
     crosshatch: boolean
     frame: boolean
@@ -110,6 +116,7 @@ export interface ProfileOverrides {
   opacity?: number
   rotationDeg?: number
   fontSize?: number
+  waviness?: number
   color?: { r: number; g: number; b: number }
   metadataMode?: MetadataMode
   metadataCustom?: CustomMetadata
@@ -132,6 +139,7 @@ export function profileFor(
       opacity: overrides.opacity ?? base.watermark.opacity,
       rotationDeg: overrides.rotationDeg ?? base.watermark.rotationDeg,
       fontSize: overrides.fontSize ?? base.watermark.fontSize,
+      waviness: overrides.waviness ?? base.watermark.waviness,
       color: overrides.color ?? base.watermark.color,
       patterns: {
         crosshatch: overrides.crosshatch ?? base.watermark.patterns.crosshatch,
@@ -160,6 +168,7 @@ function baseProfile(level: ProtectionLevel, text: WatermarkText): ProtectionPro
           color: BASE_COLOR,
           seed: 0,
           jitter: 0,
+          waviness: 1,
           patterns: NO_PATTERNS,
         },
         metadata: 'preserve',
@@ -178,6 +187,7 @@ function baseProfile(level: ProtectionLevel, text: WatermarkText): ProtectionPro
           color: BASE_COLOR,
           seed: 0,
           jitter: 0,
+          waviness: 1,
           patterns: NO_PATTERNS,
         },
         metadata: 'neutralize',
@@ -196,6 +206,7 @@ function baseProfile(level: ProtectionLevel, text: WatermarkText): ProtectionPro
           color: BASE_COLOR,
           seed: 0,
           jitter: 0,
+          waviness: 1,
           patterns: { crosshatch: true, frame: true, iridescent: false, guilloche: false, moire: false },
         },
         metadata: 'neutralize',
