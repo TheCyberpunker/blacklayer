@@ -620,7 +620,7 @@ export const esStrings: Strings = {
     applyRecommended: 'Aplicar recomendación',
     customizeText: 'Personalizar texto de la marca',
     customTextLabel: 'Texto de la marca',
-    customTextHint: 'Una línea por renglón. Deja vacío para usar destinatario y motivo por defecto.',
+    customTextHint: 'Una línea por renglón. Déjalo vacío para usar destinatario y motivo por defecto.',
     patternCrosshatchLabel: 'Añadir patrón de seguridad de trama',
     patternCrosshatchHint: 'Líneas diagonales finas sobre toda la página. Dificulta la eliminación automática de la marca.',
     patternFrameLabel: 'Añadir marco',

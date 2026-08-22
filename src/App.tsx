@@ -167,9 +167,9 @@ export function App(): JSX.Element {
   const [privacyOpen, setPrivacyOpen] = useState(false)
 
   // First-run onboarding: auto-open the "How it works" dialog once per browser,
-  // shortly after mount so the UI settles first. Marking `seen-intro` on close
-  // guarantees this fires exactly once per device unless the user wipes local
-  // settings via the Advanced panel.
+  // shortly after mount so the UI settles first. Marking `seen-intro` the
+  // moment the dialog opens (not on close) so a reload before closing does
+  // not re-trigger it — the user has already been shown the intro.
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
@@ -177,22 +177,16 @@ export function App(): JSX.Element {
     } catch {
       return
     }
-    const id = window.setTimeout(() => setHowOpen(true), 600)
-    return () => window.clearTimeout(id)
-  }, [])
-
-  useEffect(() => {
-    if (!howOpen) return
-    // When the user closes the intro dialog, remember it so subsequent visits
-    // land straight in the workspace.
-    return () => {
+    const id = window.setTimeout(() => {
+      setHowOpen(true)
       try {
         window.localStorage.setItem('blacklayer.seen-intro', '1')
       } catch {
         // storage disabled or quota full — accept the intro re-showing next time
       }
-    }
-  }, [howOpen])
+    }, 600)
+    return () => window.clearTimeout(id)
+  }, [])
 
   const [loading, setLoading] = useState(false)
   const [loaded, setLoaded] = useState<LoadedFile | null>(null)
@@ -2714,6 +2708,10 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               )}
               style={{
                 visibility: compareMode === 'original' ? 'hidden' : 'visible',
+                // When the user is looking at the untouched original, drawing
+                // or resizing redactions has no visible effect on that view
+                // and would create invisible rects. Disable canvas input.
+                pointerEvents: compareMode === 'original' ? 'none' : undefined,
               }}
             />
             {cropMode && cropRect && (
