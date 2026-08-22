@@ -1,5 +1,19 @@
 export type ProtectionLevel = 'basic' | 'recommended' | 'maximum'
-export type MetadataMode = 'preserve' | 'neutralize'
+export type MetadataMode = 'preserve' | 'neutralize' | 'custom'
+
+/**
+ * User-supplied replacement metadata used when MetadataMode === 'custom'.
+ * All fields are optional; empty strings are treated as "clear this field".
+ * CreationDate is intentionally NOT exposed: forging document creation dates
+ * can mislead in a legally significant way and is out of scope.
+ */
+export interface CustomMetadata {
+  title?: string
+  author?: string
+  subject?: string
+  keywords?: string[]
+  creator?: string
+}
 
 export type RedactionMode = 'solid' | 'blur' | 'pixelate'
 
@@ -81,6 +95,7 @@ export interface ProtectionProfile {
   level: ProtectionLevel
   watermark: WatermarkOptions
   metadata: MetadataMode
+  metadataCustom?: CustomMetadata
 }
 
 const BASE_COLOR = { r: 0.1, g: 0.1, b: 0.1 }
@@ -96,6 +111,8 @@ export interface ProfileOverrides {
   rotationDeg?: number
   fontSize?: number
   color?: { r: number; g: number; b: number }
+  metadataMode?: MetadataMode
+  metadataCustom?: CustomMetadata
 }
 
 export function profileFor(
@@ -107,6 +124,8 @@ export function profileFor(
   const base = baseProfile(level, text)
   return {
     ...base,
+    metadata: overrides.metadataMode ?? base.metadata,
+    metadataCustom: overrides.metadataCustom,
     watermark: {
       ...base.watermark,
       seed,

@@ -209,6 +209,28 @@ export function App(): JSX.Element {
   // (including ones combined from two images via "Add another photo"), the
   // user can now choose between a single PDF or a zip of PNGs, one per page.
   const [outputFormat, setOutputFormat] = useState<'pdf' | 'images'>('pdf')
+  // Metadata handling. null == follow profile default (neutralize on
+  // Recommended/Maximum, preserve on Basic). User can override via the
+  // metadata dialog to 'preserve' | 'neutralize' | 'custom' with fields.
+  const [metadataModeOverride, setMetadataModeOverride] = useState<'preserve' | 'neutralize' | 'custom' | null>(null)
+  const [metadataCustom, setMetadataCustom] = useState<{
+    title: string
+    author: string
+    subject: string
+    keywords: string
+    creator: string
+  }>({ title: '', author: '', subject: '', keywords: '', creator: '' })
+  const [metadataDialogOpen, setMetadataDialogOpen] = useState(false)
+  const [sourceMetadata, setSourceMetadata] = useState<{
+    title: string
+    author: string
+    subject: string
+    keywords: string[]
+    creator: string
+    producer: string
+    creationDate: string
+    modificationDate: string
+  } | null>(null)
   const [crosshatchOverride, setCrosshatchOverride] = useState<boolean | null>(null)
   const [frameOverride, setFrameOverride] = useState<boolean | null>(null)
   const [iridescentOverride, setIridescentOverride] = useState<boolean | null>(null)
@@ -275,7 +297,32 @@ export function App(): JSX.Element {
       zoomLoadedRef.current = loaded.file
       setZoom(1)
       setPan({ x: 0, y: 0 })
+      // Reset metadata overrides on fresh load; the dialog will re-populate
+      // the source snapshot below.
+      setMetadataModeOverride(null)
+      setMetadataCustom({ title: '', author: '', subject: '', keywords: '', creator: '' })
+      setSourceMetadata(null)
     }
+  }, [loaded])
+  // Read source PDF metadata whenever a PDF is loaded; used by the dialog
+  // to show what is currently embedded in the file the user picked.
+  useEffect(() => {
+    if (!loaded || loaded.kind !== 'pdf') {
+      setSourceMetadata(null)
+      return
+    }
+    let cancelled = false
+    void (async () => {
+      try {
+        const buf = await loaded.file.arrayBuffer()
+        const { readPdfMetadata } = await import('./core/pdf/metadata.ts')
+        const meta = await readPdfMetadata(buf)
+        if (!cancelled) setSourceMetadata(meta)
+      } catch {
+        if (!cancelled) setSourceMetadata(null)
+      }
+    })()
+    return () => { cancelled = true }
   }, [loaded])
   // Keyboard shortcuts. Cmd/Ctrl + / - to zoom, 0 to fit. Ignore when the
   // user is typing in an input.
@@ -377,9 +424,21 @@ export function App(): JSX.Element {
           rotationDeg: rotationOverride ?? undefined,
           fontSize: fontSizeOverride ?? undefined,
           color: colorOverride ? hexToRgb01(colorOverride) : undefined,
+          metadataMode: metadataModeOverride ?? undefined,
+          metadataCustom: metadataModeOverride === 'custom'
+            ? {
+                title: metadataCustom.title || undefined,
+                author: metadataCustom.author || undefined,
+                subject: metadataCustom.subject || undefined,
+                keywords: metadataCustom.keywords
+                  ? metadataCustom.keywords.split(',').map((k) => k.trim()).filter(Boolean)
+                  : undefined,
+                creator: metadataCustom.creator || undefined,
+              }
+            : undefined,
         },
       ),
-    [level, debouncedRecipient, debouncedPurpose, lang, effectiveCustom, docSeed, crosshatchOverride, frameOverride, iridescentOverride, guillocheOverride, moireOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride],
+    [level, debouncedRecipient, debouncedPurpose, lang, effectiveCustom, docSeed, crosshatchOverride, frameOverride, iridescentOverride, guillocheOverride, moireOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride, metadataModeOverride, metadataCustom],
   )
 
   const activePageRedactions = redactionsByPage.get(activePageIndex) ?? []
@@ -918,6 +977,18 @@ export function App(): JSX.Element {
           rotationDeg: rotationOverride ?? undefined,
           fontSize: fontSizeOverride ?? undefined,
           color: colorOverride ? hexToRgb01(colorOverride) : undefined,
+          metadataMode: metadataModeOverride ?? undefined,
+          metadataCustom: metadataModeOverride === 'custom'
+            ? {
+                title: metadataCustom.title || undefined,
+                author: metadataCustom.author || undefined,
+                subject: metadataCustom.subject || undefined,
+                keywords: metadataCustom.keywords
+                  ? metadataCustom.keywords.split(',').map((k) => k.trim()).filter(Boolean)
+                  : undefined,
+                creator: metadataCustom.creator || undefined,
+              }
+            : undefined,
         },
       )
       let blob: Blob
@@ -985,7 +1056,7 @@ export function App(): JSX.Element {
     } finally {
       setWorking(false)
     }
-  }, [loaded, level, recipient, purpose, lang, customEnabled, customText, redactionsByPage, docSeed, crosshatchOverride, frameOverride, iridescentOverride, guillocheOverride, moireOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride, t, clearOutput, outputFormat])
+  }, [loaded, level, recipient, purpose, lang, customEnabled, customText, redactionsByPage, docSeed, crosshatchOverride, frameOverride, iridescentOverride, guillocheOverride, moireOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride, t, clearOutput, outputFormat, metadataModeOverride, metadataCustom])
 
   const protectBatch = useCallback(async () => {
     if (!batch.length) return
@@ -1946,6 +2017,7 @@ export function App(): JSX.Element {
             onClearOutput={clearOutput}
             outputFormat={outputFormat}
             onOutputFormatChange={setOutputFormat}
+            onOpenMetadataDialog={() => setMetadataDialogOpen(true)}
             zoom={zoom}
             onZoomIn={zoomIn}
             onZoomOut={zoomOut}
@@ -2067,6 +2139,91 @@ export function App(): JSX.Element {
         onResult={handlePromptResult}
       />
       <ToastRegion toasts={toasts} onDismiss={dismissToast} />
+      <Dialog open={metadataDialogOpen} onOpenChange={setMetadataDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{t.workspace.metadataDialogTitle}</DialogTitle>
+            <DialogDescription>{t.workspace.metadataDialogDesc}</DialogDescription>
+          </DialogHeader>
+
+          {loaded?.kind === 'pdf' ? (
+            <div className="space-y-4">
+              {sourceMetadata && (
+                <div className="space-y-1.5 rounded-md border border-border/60 bg-muted/30 p-3">
+                  <p className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+                    {t.workspace.metadataSourceLabel}
+                  </p>
+                  <dl className="grid grid-cols-[max-content_1fr] gap-x-3 gap-y-0.5 text-[11px]">
+                    <dt className="text-muted-foreground">Title</dt><dd className="truncate">{sourceMetadata.title || '—'}</dd>
+                    <dt className="text-muted-foreground">Author</dt><dd className="truncate">{sourceMetadata.author || '—'}</dd>
+                    <dt className="text-muted-foreground">Subject</dt><dd className="truncate">{sourceMetadata.subject || '—'}</dd>
+                    <dt className="text-muted-foreground">Keywords</dt><dd className="truncate">{sourceMetadata.keywords.join(', ') || '—'}</dd>
+                    <dt className="text-muted-foreground">Creator</dt><dd className="truncate">{sourceMetadata.creator || '—'}</dd>
+                    <dt className="text-muted-foreground">Producer</dt><dd className="truncate">{sourceMetadata.producer || '—'}</dd>
+                    <dt className="text-muted-foreground">Created</dt><dd className="truncate">{sourceMetadata.creationDate || '—'}</dd>
+                    <dt className="text-muted-foreground">Modified</dt><dd className="truncate">{sourceMetadata.modificationDate || '—'}</dd>
+                  </dl>
+                </div>
+              )}
+
+              <div role="radiogroup" className="grid grid-cols-3 gap-1 p-1 rounded-md bg-muted">
+                {(['neutralize', 'preserve', 'custom'] as const).map((m) => {
+                  const active = (metadataModeOverride ?? previewProfile.metadata) === m
+                  const label = m === 'neutralize' ? t.workspace.metadataModeClear
+                    : m === 'preserve' ? t.workspace.metadataModeKeep
+                    : t.workspace.metadataModeCustom
+                  return (
+                    <button
+                      key={m}
+                      type="button"
+                      role="radio"
+                      aria-checked={active}
+                      onClick={() => setMetadataModeOverride(m)}
+                      className={cn(
+                        'h-8 text-xs font-medium rounded transition-colors',
+                        active ? 'bg-background text-foreground shadow-sm' : 'text-muted-foreground hover:text-foreground',
+                      )}
+                    >
+                      {label}
+                    </button>
+                  )
+                })}
+              </div>
+
+              {(metadataModeOverride ?? previewProfile.metadata) === 'custom' && (
+                <div className="space-y-2">
+                  {(['title', 'author', 'subject', 'keywords', 'creator'] as const).map((field) => (
+                    <div key={field} className="space-y-1">
+                      <Label htmlFor={`meta-${field}`} className="text-[11px] uppercase tracking-wider text-muted-foreground font-mono">
+                        {field}
+                      </Label>
+                      <Input
+                        id={`meta-${field}`}
+                        value={metadataCustom[field]}
+                        onChange={(e) => setMetadataCustom((prev) => ({ ...prev, [field]: e.target.value }))}
+                        placeholder={field === 'keywords' ? 'kw1, kw2, kw3' : ''}
+                        className="text-xs"
+                        maxLength={120}
+                      />
+                    </div>
+                  ))}
+                  <p className="text-[11px] text-muted-foreground/80 leading-snug pt-1">
+                    {t.workspace.metadataCustomWarning}
+                  </p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground leading-relaxed">
+              {t.workspace.metadataImagesNote}
+            </p>
+          )}
+
+          <DialogFooter>
+            <Button onClick={() => setMetadataDialogOpen(false)}>{t.workspace.commonDone}</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
     </TooltipProvider>
   )
@@ -2482,6 +2639,7 @@ interface WorkspaceProps {
   onClearOutput: () => void
   outputFormat: 'pdf' | 'images'
   onOutputFormatChange: (v: 'pdf' | 'images') => void
+  onOpenMetadataDialog: () => void
   zoom: number
   onZoomIn: () => void
   onZoomOut: () => void
@@ -2502,7 +2660,7 @@ interface WorkspaceProps {
   outputName: string
   error: string | null
   strings: Strings
-  previewMetadataMode: 'preserve' | 'neutralize'
+  previewMetadataMode: 'preserve' | 'neutralize' | 'custom'
   redactMode: boolean
   onToggleRedactMode: () => void
   redactionsCount: number
@@ -2613,6 +2771,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     onClearOutput,
     outputFormat,
     onOutputFormatChange,
+    onOpenMetadataDialog,
     zoom,
     onZoomIn,
     onZoomOut,
@@ -3376,6 +3535,13 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                   {strings.workspace.metadataNoteRemoved}
                 </p>
               )}
+              <button
+                type="button"
+                onClick={onOpenMetadataDialog}
+                className="text-xs text-muted-foreground hover:text-foreground underline underline-offset-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+              >
+                {strings.workspace.metadataEditLink}
+              </button>
               {showRecommendationCallout && (
                 <button
                   type="button"

@@ -1,32 +1,39 @@
 import { PDFDocument, PDFName, PDFDict, PDFRef } from 'pdf-lib'
-import type { MetadataMode } from '../types.ts'
+import type { CustomMetadata, MetadataMode } from '../types.ts'
 
 /**
  * Apply metadata mode to a loaded PDFDocument.
  *
- * "neutralize" clears / replaces every field pdf-lib's Info-dict API exposes
- * with an empty or BlackLayer-branded value AND drops the XMP metadata stream
- * from the catalog. XMP is the noisier of the two: many producers write an
- * edit history (xmpMM:History), a stable document UUID (xmpMM:DocumentID),
- * and application traces (xmp:CreatorTool) that leak more than the Info dict.
+ * "neutralize" clears / replaces every Info-dict field with an empty or
+ * BlackLayer-branded value AND drops the XMP metadata stream from the catalog.
+ * XMP holds edit history (xmpMM:History), a stable document UUID
+ * (xmpMM:DocumentID) and app traces that leak more than the Info dict.
+ *
+ * "custom" writes user-supplied values into the Info dict (still drops XMP).
+ * Empty fields become empty strings. CreationDate and ModDate are pinned to
+ * epoch either way; forging document dates is out of scope.
  *
  * "preserve" is a no-op.
  */
-export function applyMetadataMode(pdf: PDFDocument, mode: MetadataMode): void {
+export function applyMetadataMode(
+  pdf: PDFDocument,
+  mode: MetadataMode,
+  custom?: CustomMetadata,
+): void {
   if (mode === 'preserve') return
 
-  // Info dictionary
-  pdf.setTitle('')
-  pdf.setAuthor('')
-  pdf.setSubject('')
-  pdf.setKeywords([])
-  pdf.setProducer('BlackLayer')
-  pdf.setCreator('BlackLayer')
-  const now = new Date(0) // epoch; predictable and neutral
+  const isCustom = mode === 'custom' && custom !== undefined
+  pdf.setTitle(isCustom ? custom.title ?? '' : '')
+  pdf.setAuthor(isCustom ? custom.author ?? '' : '')
+  pdf.setSubject(isCustom ? custom.subject ?? '' : '')
+  pdf.setKeywords(isCustom ? custom.keywords ?? [] : [])
+  pdf.setProducer(isCustom ? custom.creator ?? 'BlackLayer' : 'BlackLayer')
+  pdf.setCreator(isCustom ? custom.creator ?? 'BlackLayer' : 'BlackLayer')
+  const now = new Date(0)
   pdf.setCreationDate(now)
   pdf.setModificationDate(now)
 
-  // XMP metadata stream
+  // XMP metadata stream: dropped in both neutralize and custom modes.
   removeXmpMetadata(pdf)
 }
 
@@ -54,6 +61,41 @@ function removeXmpMetadata(pdf: PDFDocument): void {
   dropFrom(pdf.catalog)
   for (const page of pdf.getPages()) {
     dropFrom(page.node)
+  }
+}
+
+/**
+ * Read Info-dict metadata from a source PDF (bytes). Returns a snapshot with
+ * empty strings for missing fields. Used by the "Ver / editar metadatos"
+ * dialog so the user can see what is currently embedded before deciding what
+ * to keep, clear, or replace.
+ */
+export async function readPdfMetadata(
+  sourceBytes: ArrayBuffer,
+): Promise<{
+  title: string
+  author: string
+  subject: string
+  keywords: string[]
+  creator: string
+  producer: string
+  creationDate: string
+  modificationDate: string
+}> {
+  // Copy bytes because pdf-lib's parser may consume the underlying buffer.
+  const copy = new Uint8Array(sourceBytes.byteLength)
+  copy.set(new Uint8Array(sourceBytes))
+  const pdf = await PDFDocument.load(copy, { updateMetadata: false })
+  const fmt = (d?: Date) => (d ? d.toISOString().slice(0, 10) : '')
+  return {
+    title: pdf.getTitle() ?? '',
+    author: pdf.getAuthor() ?? '',
+    subject: pdf.getSubject() ?? '',
+    keywords: (pdf.getKeywords() ?? '').split(',').map((k) => k.trim()).filter(Boolean),
+    creator: pdf.getCreator() ?? '',
+    producer: pdf.getProducer() ?? '',
+    creationDate: fmt(pdf.getCreationDate()),
+    modificationDate: fmt(pdf.getModificationDate()),
   }
 }
 

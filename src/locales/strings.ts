@@ -236,6 +236,15 @@ export interface Strings {
     outputFormatImages: string
     outputFormatPdfHint: string
     outputFormatImagesHint: string
+    metadataEditLink: string
+    metadataDialogTitle: string
+    metadataDialogDesc: string
+    metadataSourceLabel: string
+    metadataModeClear: string
+    metadataModeKeep: string
+    metadataModeCustom: string
+    metadataCustomWarning: string
+    metadataImagesNote: string
     templateEmpty: string
     templateEmptyHint: string
     templateQuickPickLabel: string
@@ -546,6 +555,15 @@ export const enStrings: Strings = {
     outputFormatImages: 'Individual images',
     outputFormatPdfHint: 'Downloads a single PDF with all pages inside.',
     outputFormatImagesHint: 'Downloads one PNG per page inside a zip. Useful when you combined the front and back of an ID and want them as separate images.',
+    metadataEditLink: 'View / edit metadata',
+    metadataDialogTitle: 'Document metadata',
+    metadataDialogDesc: 'Choose what happens to the hidden information inside this document.',
+    metadataSourceLabel: 'Currently in the file',
+    metadataModeClear: 'Clear',
+    metadataModeKeep: 'Keep original',
+    metadataModeCustom: 'Custom',
+    metadataCustomWarning: 'Do not enter values that could make the recipient believe something legally false. Dates are pinned to a neutral value on export.',
+    metadataImagesNote: 'For images, all embedded metadata (EXIF, GPS, camera info) is always removed on export. Editing metadata does not apply.',
     templateEmpty:
       'No template detected for this document. Templates hide known ID fields (number, birth date, signature) automatically. We currently ship DNI, passport and Spanish driving licence.',
     templateEmptyHint:
@@ -858,6 +876,15 @@ export const esStrings: Strings = {
     outputFormatImages: 'Imágenes por separado',
     outputFormatPdfHint: 'Descarga un solo PDF con todas las páginas.',
     outputFormatImagesHint: 'Descarga un PNG por página dentro de un zip. Útil cuando combinaste anverso y reverso de un DNI y quieres tenerlas separadas.',
+    metadataEditLink: 'Ver / editar metadatos',
+    metadataDialogTitle: 'Metadatos del documento',
+    metadataDialogDesc: 'Elige qué pasa con la información oculta dentro del documento.',
+    metadataSourceLabel: 'Actualmente en el archivo',
+    metadataModeClear: 'Limpiar',
+    metadataModeKeep: 'Mantener original',
+    metadataModeCustom: 'Personalizar',
+    metadataCustomWarning: 'No pongas valores que puedan hacer creer al destinatario algo falso legalmente. Las fechas se fijan a un valor neutro al exportar.',
+    metadataImagesNote: 'En imágenes, la metadata embebida (EXIF, GPS, información de cámara) se elimina siempre al exportar. Editarla no aplica.',
     templateEmpty:
       'No hay plantilla detectada para este documento. Las plantillas tapan automáticamente los campos conocidos de un documento de identidad (número, fecha de nacimiento, firma). De momento incluimos DNI, pasaporte y permiso de conducir español.',
     templateEmptyHint:

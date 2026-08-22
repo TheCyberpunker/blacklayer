@@ -56,7 +56,7 @@ export async function applyPdfWatermark({
     await drawWatermarkOnPdfPage(pdf, page, font, lines, options, canUseCanvas)
   }
 
-  applyMetadataMode(pdf, profile.metadata)
+  applyMetadataMode(pdf, profile.metadata, profile.metadataCustom)
 
   const bytes = await pdf.save()
   return { bytes, hadDigitalSignature: hadSignature, rasterizedPages: rasterized.sort((a, b) => a - b) }
