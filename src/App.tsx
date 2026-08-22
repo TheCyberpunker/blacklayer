@@ -2590,8 +2590,6 @@ function Workspace(props: WorkspaceProps): JSX.Element {
   // tab area, always visible.
   type SidebarTab = 'copia' | 'proteccion' | 'plantilla' | 'avanzado'
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('copia')
-  // Editing custom watermark text in a Dialog keeps the Avanzado tab short.
-  const [customTextDialogOpen, setCustomTextDialogOpen] = useState(false)
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px] xl:grid-cols-[minmax(0,1fr)_460px] gap-8 xl:gap-10 animate-fade-in">
@@ -3211,6 +3209,36 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                   </div>
                 )}
               </div>
+              {/* Text customization lives here, not in Avanzado, because it
+                  overrides the watermark text these inputs already generate.
+                  Same tab, same concept. Expands inline when toggled on. */}
+              <div className="pt-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={customEnabled}
+                    onChange={onToggleCustom}
+                    className="h-4 w-4 rounded border-input accent-foreground"
+                  />
+                  <span className="text-xs font-medium text-foreground">
+                    {strings.workspace.customizeText}
+                  </span>
+                </label>
+                {customEnabled && (
+                  <div className="mt-2 space-y-1.5">
+                    <p className="text-[11px] text-muted-foreground leading-snug">
+                      {strings.workspace.customTextHint}
+                    </p>
+                    <textarea
+                      aria-label={strings.workspace.customTextLabel}
+                      value={customText}
+                      onChange={(e) => onCustomText(e.target.value)}
+                      rows={3}
+                      className="w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background resize-none"
+                    />
+                  </div>
+                )}
+              </div>
             </section>
           )}
 
@@ -3369,18 +3397,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                   />
                 </div>
               </div>
-              <div className="flex items-center justify-between gap-2 pt-1">
-                <button
-                  type="button"
-                  onClick={() => setCustomTextDialogOpen(true)}
-                  className="inline-flex items-center gap-2 text-xs text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-                >
-                  <FileText className="h-3.5 w-3.5" />
-                  {strings.workspace.customizeText}
-                  {customEnabled && (
-                    <span className="ml-1 h-1.5 w-1.5 rounded-full bg-foreground" aria-label="on" />
-                  )}
-                </button>
+              <div className="flex items-center justify-end gap-2 pt-1">
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <button
@@ -3467,40 +3484,6 @@ function Workspace(props: WorkspaceProps): JSX.Element {
         </>
         )}
       </aside>
-
-      <Dialog open={customTextDialogOpen} onOpenChange={setCustomTextDialogOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader>
-            <DialogTitle>{strings.workspace.customizeText}</DialogTitle>
-            <DialogDescription>{strings.workspace.customTextHint}</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={customEnabled}
-                onChange={onToggleCustom}
-                className="h-4 w-4 rounded border-input accent-foreground"
-              />
-              <span className="text-sm">{strings.workspace.customTextEnable}</span>
-            </label>
-            {customEnabled && (
-              <textarea
-                aria-label={strings.workspace.customTextLabel}
-                value={customText}
-                onChange={(e) => onCustomText(e.target.value)}
-                rows={5}
-                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background resize-none"
-              />
-            )}
-          </div>
-          <DialogFooter>
-            <Button onClick={() => setCustomTextDialogOpen(false)}>
-              {strings.workspace.commonDone}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
