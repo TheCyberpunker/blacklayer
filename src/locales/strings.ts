@@ -209,6 +209,16 @@ export interface Strings {
     ocrAnalyze: string
     ocrRunning: string
     ocrHint: string
+    protectionSummary: (levelLabel: string) => string
+    protectionSummaryMismatch: string
+    templateSummary: (docLabel: string, count: number) => string
+    tabCopia: string
+    tabProteccion: string
+    tabPlantilla: string
+    tabAvanzado: string
+    patternsLabel: string
+    templateEmpty: string
+    templateEmptyHint: string
   }
   result: {
     ready: string
@@ -487,6 +497,19 @@ export const enStrings: Strings = {
     ocrAnalyze: 'Analyze text',
     ocrRunning: 'Analyzing text',
     ocrHint: 'Read the visible text to refine detection. Runs locally, may take a few seconds.',
+    protectionSummary: (levelLabel) => `Protection: ${levelLabel}`,
+    protectionSummaryMismatch: 'Different from recommended',
+    templateSummary: (docLabel, count) =>
+      `${docLabel} template · ${count} field${count === 1 ? '' : 's'} selected`,
+    tabCopia: 'Copy',
+    tabProteccion: 'Protection',
+    tabPlantilla: 'Template',
+    tabAvanzado: 'Advanced',
+    patternsLabel: 'Patterns',
+    templateEmpty:
+      'No template detected for this document. Templates hide known ID fields (number, birth date, signature) automatically. We currently ship DNI, passport and Spanish driving licence.',
+    templateEmptyHint:
+      'If your image looks like an ID, click Analyze text so BlackLayer reads it and detects the type.',
   },
   result: {
     ready: 'Your protected copy is ready',
@@ -765,6 +788,19 @@ export const esStrings: Strings = {
     ocrAnalyze: 'Analizar texto',
     ocrRunning: 'Analizando texto',
     ocrHint: 'Lee el texto visible para afinar la detección. Se ejecuta en local, puede tardar unos segundos.',
+    protectionSummary: (levelLabel) => `Protección: ${levelLabel}`,
+    protectionSummaryMismatch: 'Diferente a la recomendada',
+    templateSummary: (docLabel, count) =>
+      `Plantilla ${docLabel} · ${count} campo${count === 1 ? '' : 's'} marcado${count === 1 ? '' : 's'}`,
+    tabCopia: 'Copia',
+    tabProteccion: 'Protección',
+    tabPlantilla: 'Plantilla',
+    tabAvanzado: 'Avanzado',
+    patternsLabel: 'Patrones de seguridad',
+    templateEmpty:
+      'No hay plantilla detectada para este documento. Las plantillas tapan automáticamente los campos conocidos de un documento de identidad (número, fecha de nacimiento, firma). De momento incluimos DNI, pasaporte y permiso de conducir español.',
+    templateEmptyHint:
+      'Si tu imagen es un documento de identidad, pulsa Analizar texto para que BlackLayer lo lea y detecte el tipo.',
   },
   result: {
     ready: 'Tu copia protegida está lista',

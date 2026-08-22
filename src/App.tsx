@@ -1787,8 +1787,6 @@ export function App(): JSX.Element {
             onLevelChange={setLevelManual}
             onRecipient={setRecipient}
             onPurpose={setPurpose}
-            advancedOpen={advancedOpen}
-            onToggleAdvanced={() => setAdvancedOpen((v) => !v)}
             crosshatchOn={previewProfile.watermark.patterns.crosshatch}
             frameOn={previewProfile.watermark.patterns.frame}
             iridescentOn={previewProfile.watermark.patterns.iridescent}
@@ -2285,8 +2283,6 @@ interface WorkspaceProps {
   onLevelChange: (l: ProtectionLevel) => void
   onRecipient: (v: string) => void
   onPurpose: (v: string) => void
-  advancedOpen: boolean
-  onToggleAdvanced: () => void
   crosshatchOn: boolean
   frameOn: boolean
   iridescentOn: boolean
@@ -2406,8 +2402,6 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     onLevelChange,
     onRecipient,
     onPurpose,
-    advancedOpen,
-    onToggleAdvanced,
     crosshatchOn,
     frameOn,
     iridescentOn,
@@ -2503,6 +2497,12 @@ function Workspace(props: WorkspaceProps): JSX.Element {
   const suggestions = purposesFor(detection.type, strings.header.langLabel === 'Idioma' ? 'es' : 'en')
   const suggestedLevel = recommendedLevel(detection)
   const showRecommendationCallout = detection.type !== 'unknown' && !levelTouched && suggestedLevel !== level
+  // Sidebar tab. The sidebar is a persistent drawer with 4 tabs; each tab's
+  // full content is visible without scrolling, and switching between tabs is
+  // instant. Presets, signature warning, Protect and result stay outside the
+  // tab area, always visible.
+  type SidebarTab = 'copia' | 'proteccion' | 'plantilla' | 'avanzado'
+  const [sidebarTab, setSidebarTab] = useState<SidebarTab>('copia')
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_400px] gap-8 animate-fade-in">
@@ -2921,124 +2921,178 @@ function Workspace(props: WorkspaceProps): JSX.Element {
       </section>
 
       {/* Controls */}
-      <aside className="lg:sticky lg:top-20 lg:self-start space-y-5">
-        <PresetBar
-          presets={presets}
-          onApply={onApplyPreset}
-          onSave={onSavePreset}
-          onDelete={onDeletePreset}
-          onClearAll={onClearAllPresets}
-          canSave={canSavePreset}
-          strings={strings}
-        />
-
-        <section className="space-y-4" aria-label={strings.workspace.stepAbout}>
-          <StepHeading step={1} title={strings.workspace.stepAbout} />
-          <div className="space-y-1.5">
-            <Label htmlFor="recipient">{strings.workspace.recipient}</Label>
-            <Input
-              id="recipient"
-              value={recipient}
-              onChange={(e) => onRecipient(e.target.value)}
-              placeholder={strings.workspace.recipientPh}
-              autoComplete="off"
-              maxLength={80}
-            />
-          </div>
-          <div className="space-y-1.5">
-            <Label htmlFor="purpose">{strings.workspace.purpose}</Label>
-            <Input
-              id="purpose"
-              value={purpose}
-              onChange={(e) => onPurpose(e.target.value)}
-              placeholder={strings.workspace.purposePh}
-              autoComplete="off"
-              maxLength={80}
-            />
-            {suggestions.length > 0 && (
-              <div className="pt-1.5">
-                <div className="flex flex-wrap gap-1.5">
-                  {suggestions.slice(0, 4).map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      onClick={() => onPurpose(s.label)}
-                      className={cn(
-                        'text-xs px-2.5 py-1 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
-                        purpose === s.label
-                          ? 'border-foreground bg-foreground text-background'
-                          : 'border-border hover:border-foreground/50 text-muted-foreground hover:text-foreground',
-                      )}
-                    >
-                      {s.label}
-                    </button>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </section>
-
-        <section className="space-y-2 pt-4 border-t border-border/60" aria-label={strings.workspace.stepProtection}>
-          <StepHeading step={2} title={strings.workspace.stepProtection} />
-          <LevelPicker level={level} onChange={onLevelChange} strings={strings} />
-          <p className="text-xs text-muted-foreground pt-0.5 leading-relaxed">
-            {strings.workspace.levelDescription[level]}
-          </p>
-          {previewMetadataMode === 'neutralize' && (
-            <p className="text-xs text-muted-foreground/80 font-mono">
-              {strings.workspace.metadataNoteRemoved}
-            </p>
-          )}
-          {showRecommendationCallout && (
-            <button
-              type="button"
-              onClick={onApplyRecommended}
-              className="mt-2 w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md border border-border hover:border-foreground/40 hover:bg-muted/50 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-            >
-              <span className="flex items-center gap-2 text-xs">
-                <Sparkles className="h-3.5 w-3.5 text-foreground/70" />
-                {strings.workspace.recommendedFor(strings.workspace.detectionLabel[detection.type])}
-              </span>
-              <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
-                {strings.workspace.applyRecommended}
-              </span>
-            </button>
-          )}
-        </section>
-
-        {template && (
-          <TemplatePanel
-            template={template}
-            side={templateSide}
-            onSideChange={onTemplateSideChange}
-            activeFieldIds={activeTemplateFieldIds}
-            onToggleField={onToggleTemplateField}
-            onApplyProfile={onApplyProfile}
-            onClear={onClearTemplate}
-            lang={strings.header.langLabel === 'Idioma' ? 'es' : 'en'}
+      <aside className="lg:sticky lg:top-20 lg:self-start flex flex-col gap-3">
+        {/* Fixed top row: Presets. */}
+        <div className="flex items-center justify-end">
+          <PresetBar
+            presets={presets}
+            onApply={onApplyPreset}
+            onSave={onSavePreset}
+            onDelete={onDeletePreset}
+            onClearAll={onClearAllPresets}
+            canSave={canSavePreset}
             strings={strings}
           />
-        )}
+        </div>
 
-        {/* Advanced */}
-        <section className="space-y-2 pt-4 border-t border-border/60">
-          <button
-            type="button"
-            onClick={onToggleAdvanced}
-            className="flex items-center justify-between w-full text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-            aria-expanded={advancedOpen}
-          >
-            <StepHeading step={3} title={strings.workspace.stepAdvanced} optional />
-            <ChevronDown
-              className={cn(
-                'h-4 w-4 text-muted-foreground transition-transform',
-                advancedOpen ? 'rotate-180' : '',
+        {/* Tab strip. All tabs sit here, only the active one's content renders below. */}
+        <div role="tablist" aria-label="Ajustes del documento" className="grid grid-cols-4 gap-1 p-1 rounded-md bg-muted">
+          {([
+            { id: 'copia' as const, label: strings.workspace.tabCopia },
+            { id: 'proteccion' as const, label: strings.workspace.tabProteccion },
+            { id: 'plantilla' as const, label: strings.workspace.tabPlantilla },
+            { id: 'avanzado' as const, label: strings.workspace.tabAvanzado },
+          ]).map((t) => {
+            const selected = sidebarTab === t.id
+            return (
+              <button
+                key={t.id}
+                type="button"
+                role="tab"
+                aria-selected={selected}
+                onClick={() => setSidebarTab(t.id)}
+                className={cn(
+                  'h-8 text-xs font-medium rounded transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                  selected
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {t.label}
+              </button>
+            )
+          })}
+        </div>
+
+        {/* Tab content. No fixed heights; each tab is short enough to fit within
+            the sidebar's sticky viewport without scroll (see individual panels
+            below for their compact layouts). */}
+        <div className="min-h-0">
+          {sidebarTab === 'copia' && (
+            <section className="space-y-3" aria-label={strings.workspace.tabCopia}>
+              <div className="space-y-1.5">
+                <Label htmlFor="recipient">{strings.workspace.recipient}</Label>
+                <Input
+                  id="recipient"
+                  value={recipient}
+                  onChange={(e) => onRecipient(e.target.value)}
+                  placeholder={strings.workspace.recipientPh}
+                  autoComplete="off"
+                  maxLength={80}
+                />
+              </div>
+              <div className="space-y-1.5">
+                <Label htmlFor="purpose">{strings.workspace.purpose}</Label>
+                <Input
+                  id="purpose"
+                  value={purpose}
+                  onChange={(e) => onPurpose(e.target.value)}
+                  placeholder={strings.workspace.purposePh}
+                  autoComplete="off"
+                  maxLength={80}
+                />
+                {suggestions.length > 0 && (
+                  <div className="pt-1.5 flex flex-wrap gap-1.5">
+                    {suggestions.slice(0, 4).map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        onClick={() => onPurpose(s.label)}
+                        className={cn(
+                          'text-xs px-2.5 py-1 rounded-full border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
+                          purpose === s.label
+                            ? 'border-foreground bg-foreground text-background'
+                            : 'border-border hover:border-foreground/50 text-muted-foreground hover:text-foreground',
+                        )}
+                      >
+                        {s.label}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </section>
+          )}
+
+          {sidebarTab === 'proteccion' && (
+            <section className="space-y-3" aria-label={strings.workspace.tabProteccion}>
+              <LevelPicker level={level} onChange={onLevelChange} strings={strings} />
+              <p className="text-xs text-muted-foreground leading-relaxed">
+                {strings.workspace.levelDescription[level]}
+              </p>
+              {previewMetadataMode === 'neutralize' && (
+                <p className="text-[11px] text-muted-foreground/80 font-mono">
+                  {strings.workspace.metadataNoteRemoved}
+                </p>
               )}
-            />
-          </button>
-          {advancedOpen && (
-            <div className="space-y-4">
+              {showRecommendationCallout && (
+                <button
+                  type="button"
+                  onClick={onApplyRecommended}
+                  className="w-full flex items-center justify-between gap-3 px-3 py-2 rounded-md border border-border hover:border-foreground/40 hover:bg-muted/50 text-left transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                >
+                  <span className="flex items-center gap-2 text-xs">
+                    <Sparkles className="h-3.5 w-3.5 text-foreground/70" />
+                    {strings.workspace.recommendedFor(strings.workspace.detectionLabel[detection.type])}
+                  </span>
+                  <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+                    {strings.workspace.applyRecommended}
+                  </span>
+                </button>
+              )}
+            </section>
+          )}
+
+          {sidebarTab === 'plantilla' && (() => {
+            if (template) {
+              const tmplLang = strings.header.langLabel === 'Idioma' ? 'es' : 'en'
+              return (
+                <TemplatePanel
+                  template={template}
+                  side={templateSide}
+                  onSideChange={onTemplateSideChange}
+                  activeFieldIds={activeTemplateFieldIds}
+                  onToggleField={onToggleTemplateField}
+                  onApplyProfile={onApplyProfile}
+                  onClear={onClearTemplate}
+                  lang={tmplLang}
+                  strings={strings}
+                  embedded
+                />
+              )
+            }
+            // Empty state: no template because either detection is weak or the
+            // document type doesn't have one shipped. Guide the user rather
+            // than gating the tab.
+            const canRunOcr = loaded.kind === 'image' && !ocrRunning
+            return (
+              <div className="space-y-3 rounded-md border border-dashed border-border p-4 text-sm text-muted-foreground">
+                <div className="flex items-start gap-2">
+                  <Sparkles className="h-4 w-4 mt-0.5 shrink-0 text-foreground/60" />
+                  <p className="leading-relaxed">
+                    {strings.workspace.templateEmpty}
+                  </p>
+                </div>
+                {canRunOcr && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onAnalyzeText}
+                    className="gap-1.5 text-xs"
+                  >
+                    <ScanText className="h-3.5 w-3.5" />
+                    {strings.workspace.ocrAnalyze}
+                  </Button>
+                )}
+                <p className="text-[11px] text-muted-foreground/80">
+                  {strings.workspace.templateEmptyHint}
+                </p>
+              </div>
+            )
+          })()}
+
+          {sidebarTab === 'avanzado' && (
+            <section className="space-y-4" aria-label={strings.workspace.tabAvanzado}>
               <StyleSliders
                 opacity={opacity}
                 rotationDeg={rotationDeg}
@@ -3051,36 +3105,38 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                 onReset={onResetStyle}
                 strings={strings}
               />
-              <PatternToggle
-                label={strings.workspace.patternCrosshatchLabel}
-                hint={strings.workspace.patternCrosshatchHint}
-                checked={crosshatchOn}
-                onChange={onCrosshatchChange}
-              />
-              <PatternToggle
-                label={strings.workspace.patternFrameLabel}
-                hint={strings.workspace.patternFrameHint}
-                checked={frameOn}
-                onChange={onFrameChange}
-              />
-              <PatternToggle
-                label={strings.workspace.patternIridescentLabel}
-                hint={strings.workspace.patternIridescentHint}
-                checked={iridescentOn}
-                onChange={onIridescentChange}
-              />
-              <PatternToggle
-                label={strings.workspace.patternGuillocheLabel}
-                hint={strings.workspace.patternGuillocheHint}
-                checked={guillocheOn}
-                onChange={onGuillocheChange}
-              />
-              <PatternToggle
-                label={strings.workspace.patternMoireLabel}
-                hint={strings.workspace.patternMoireHint}
-                checked={moireOn}
-                onChange={onMoireChange}
-              />
+              <div className="space-y-1.5">
+                <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
+                  {strings.workspace.patternsLabel}
+                </span>
+                <div className="grid grid-cols-2 gap-1.5">
+                  <PatternPill
+                    label={strings.workspace.patternCrosshatchLabel}
+                    checked={crosshatchOn}
+                    onChange={onCrosshatchChange}
+                  />
+                  <PatternPill
+                    label={strings.workspace.patternFrameLabel}
+                    checked={frameOn}
+                    onChange={onFrameChange}
+                  />
+                  <PatternPill
+                    label={strings.workspace.patternIridescentLabel}
+                    checked={iridescentOn}
+                    onChange={onIridescentChange}
+                  />
+                  <PatternPill
+                    label={strings.workspace.patternGuillocheLabel}
+                    checked={guillocheOn}
+                    onChange={onGuillocheChange}
+                  />
+                  <PatternPill
+                    label={strings.workspace.patternMoireLabel}
+                    checked={moireOn}
+                    onChange={onMoireChange}
+                  />
+                </div>
+              </div>
               <CustomTextBlock
                 enabled={customEnabled}
                 onToggle={onToggleCustom}
@@ -3088,23 +3144,19 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                 onChange={onCustomText}
                 strings={strings}
               />
-              <div className="pt-2 border-t border-border/60">
-                <button
-                  type="button"
-                  onClick={onDeleteAllLocalSettings}
-                  className="mt-2 w-full flex items-center gap-2 text-left text-xs text-destructive hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-                >
-                  <Trash2 className="h-3.5 w-3.5 shrink-0" />
-                  <span>{strings.workspace.deleteLocalSettings}</span>
-                </button>
-                <p className="mt-1 text-xs text-muted-foreground pl-5 leading-relaxed">
-                  {strings.workspace.deleteLocalSettingsHint}
-                </p>
-              </div>
-            </div>
+              <button
+                type="button"
+                onClick={onDeleteAllLocalSettings}
+                className="flex items-center gap-2 text-left text-xs text-destructive hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+              >
+                <Trash2 className="h-3.5 w-3.5 shrink-0" />
+                <span>{strings.workspace.deleteLocalSettings}</span>
+              </button>
+            </section>
           )}
-        </section>
+        </div>
 
+        {/* Fixed bottom: warning + primary CTA + result. Always visible. */}
         {loaded.kind === 'pdf' && loaded.hasSignature && (
           <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 flex items-start gap-2 text-xs text-destructive">
             <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
@@ -3742,6 +3794,7 @@ function TemplatePanel({
   onClear,
   lang,
   strings,
+  embedded = false,
 }: {
   template: DocumentTemplate
   side: CardSide
@@ -3752,19 +3805,43 @@ function TemplatePanel({
   onClear: () => void
   lang: 'en' | 'es'
   strings: Strings
+  /**
+   * When embedded in a CollapsibleRow the outer heading + border + top hint
+   * paragraph would duplicate the row chrome. Skip them.
+   */
+  embedded?: boolean
 }): JSX.Element {
   const label = lang === 'es' ? template.labelEs : template.labelEn
   const fields = template.fields.filter((f) => f.side === side)
   const anyActive = fields.some((f) => activeFieldIds.has(f.id))
 
   return (
-    <section className="space-y-3 pt-4 border-t border-border/60" aria-label={strings.workspace.templateTitle(label)}>
-      <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-sm font-semibold tracking-tight">
-          <Sparkles className="h-3.5 w-3.5 text-foreground/70" />
-          <span>{strings.workspace.templateTitle(label)}</span>
-        </div>
-        {anyActive && (
+    <section
+      className={embedded ? 'space-y-3' : 'space-y-3 pt-4 border-t border-border/60'}
+      aria-label={strings.workspace.templateTitle(label)}
+    >
+      {!embedded && (
+        <>
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm font-semibold tracking-tight">
+              <Sparkles className="h-3.5 w-3.5 text-foreground/70" />
+              <span>{strings.workspace.templateTitle(label)}</span>
+            </div>
+            {anyActive && (
+              <button
+                type="button"
+                onClick={onClear}
+                className="text-[11px] text-muted-foreground hover:text-destructive transition-colors"
+              >
+                {strings.workspace.templateClear}
+              </button>
+            )}
+          </div>
+          <p className="text-xs text-muted-foreground leading-relaxed">{strings.workspace.templateHint}</p>
+        </>
+      )}
+      {embedded && anyActive && (
+        <div className="flex justify-end">
           <button
             type="button"
             onClick={onClear}
@@ -3772,10 +3849,8 @@ function TemplatePanel({
           >
             {strings.workspace.templateClear}
           </button>
-        )}
-      </div>
-
-      <p className="text-xs text-muted-foreground leading-relaxed">{strings.workspace.templateHint}</p>
+        </div>
+      )}
 
       {/* Side selector */}
       <div
@@ -3862,22 +3937,16 @@ function TemplatePanel({
 }
 
 function StepHeading({
-  step,
   title,
   optional,
 }: {
-  step: number
+  /** Legacy prop kept for callers that still pass it; ignored visually. */
+  step?: number
   title: string
   optional?: boolean
 }): JSX.Element {
   return (
     <div className="flex items-baseline gap-2">
-      <span
-        aria-hidden="true"
-        className="text-[11px] font-mono text-muted-foreground tabular-nums"
-      >
-        {String(step).padStart(2, '0')}
-      </span>
       <h3 className="text-sm font-semibold tracking-tight text-foreground">{title}</h3>
       {optional && (
         <span className="text-[10px] font-mono uppercase tracking-wider text-muted-foreground">
@@ -3888,6 +3957,11 @@ function StepHeading({
   )
 }
 
+/**
+ * Collapsible sidebar row used by Direction C: a one-line clickable summary
+ * that expands into a full panel below it. Keeps default state minimal so
+ * non-technical users are not overwhelmed.
+ */
 function PresetBar({
   presets,
   onApply,
@@ -4453,6 +4527,39 @@ function PatternToggle({
         <span className="text-[11px] text-muted-foreground block mt-1">{hint}</span>
       </div>
     </label>
+  )
+}
+
+/**
+ * Compact pill-shape toggle used in the Advanced tab's patterns grid. Fits
+ * two per row and shows just the label; hint is a native tooltip so the grid
+ * stays dense enough for all patterns to be visible without scroll.
+ */
+function PatternPill({
+  label,
+  checked,
+  onChange,
+}: {
+  label: string
+  checked: boolean
+  onChange: (v: boolean) => void
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      role="switch"
+      aria-checked={checked}
+      onClick={() => onChange(!checked)}
+      title={label}
+      className={cn(
+        'text-xs font-medium h-8 px-3 rounded-md border transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring text-left truncate',
+        checked
+          ? 'border-foreground bg-foreground text-background'
+          : 'border-border hover:border-foreground/40 bg-background text-muted-foreground hover:text-foreground',
+      )}
+    >
+      {label}
+    </button>
   )
 }
 
