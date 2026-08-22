@@ -101,13 +101,27 @@ function itemRect(item: any, viewport: any, matchStart: number, matchLen: number
   const itemWidth: number = typeof item.width === 'number' ? item.width : 0
   const itemHeight: number = typeof item.height === 'number' && item.height > 0 ? item.height : Math.abs(d) || Math.abs(a) || 10
   const fontSize = Math.max(1, itemHeight)
-  const chunkX = e + itemWidth * (matchStart / Math.max(1, totalLen))
-  const chunkW = itemWidth * (matchLen / Math.max(1, totalLen))
-  // pdfjs y increases upward from bottom-left. Our normalized system is top-down.
-  // baseline sits at f; glyphs occupy roughly [f, f + fontSize * 0.85].
-  const topPdf = f + fontSize * 0.9
+
+  // Full-item match: use the whole item's width directly. Bypasses the
+  // proportional character-width approximation entirely.
+  const isFullMatch = matchStart === 0 && matchLen >= totalLen
+  const startFrac = isFullMatch ? 0 : matchStart / Math.max(1, totalLen)
+  const endFrac = isFullMatch ? 1 : (matchStart + matchLen) / Math.max(1, totalLen)
+
+  // Horizontal safety padding: proportional character-width approximation
+  // undershoots on wide glyphs (W, M, %). Add fontSize * 0.15 on each side so
+  // the redaction bar visibly covers the whole match even in variable fonts.
+  const hPad = fontSize * 0.15
+  const chunkX = e + itemWidth * startFrac - hPad
+  const chunkW = Math.max(0, itemWidth * (endFrac - startFrac)) + hPad * 2
+
+  // Vertical: extend above the baseline to cover full cap height + accents,
+  // and below to cover descenders. Was fontSize * 0.9 / * 1.15 — too tight
+  // for many typefaces. Now: from baseline + 1.1 * fs down to baseline - 0.3 * fs.
+  const topPdf = f + fontSize * 1.1
   const yTopLeft = viewport.height - topPdf
-  const heightNorm = fontSize * 1.15
+  const heightNorm = fontSize * 1.4
+
   const vw = viewport.width || 1
   const vh = viewport.height || 1
   return {
