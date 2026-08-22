@@ -166,6 +166,7 @@ export interface Strings {
     searchClear: string
     searchLimitationsPdfOnly: string
     searchTooShort: string
+    imageToolsPdfNote: string
     adjustRotateLeft: string
     adjustRotateRight: string
     adjustGrayscale: string
@@ -434,6 +435,7 @@ export const enStrings: Strings = {
     searchClear: 'Clear search hides',
     searchLimitationsPdfOnly: 'Text search works on PDFs with embedded text. Scanned image PDFs need OCR (on the roadmap).',
     searchTooShort: 'Type at least 2 characters.',
+    imageToolsPdfNote: 'Rotate, crop, black & white, and brightness only apply to image files. For a PDF, redact, watermark, and metadata clean-up already work below.',
     adjustRotateLeft: 'Rotate left',
     adjustRotateRight: 'Rotate right',
     adjustGrayscale: 'Black & white',
@@ -706,6 +708,7 @@ export const esStrings: Strings = {
     searchClear: 'Vaciar búsquedas ocultas',
     searchLimitationsPdfOnly: 'La búsqueda funciona con PDFs con texto incrustado. Los PDFs escaneados necesitan OCR (en la hoja de ruta).',
     searchTooShort: 'Escribe al menos 2 caracteres.',
+    imageToolsPdfNote: 'Rotar, recortar, blanco y negro y brillo solo aplican a imágenes. Para PDFs, ocultar, marca de agua y limpieza de metadatos ya funcionan abajo.',
     adjustRotateLeft: 'Girar a la izquierda',
     adjustRotateRight: 'Girar a la derecha',
     adjustGrayscale: 'Blanco y negro',

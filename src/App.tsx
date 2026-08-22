@@ -2517,7 +2517,10 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               strings={strings}
             />
             <div className="flex items-center gap-2">
-              {loaded.kind === 'image' && (
+              {(() => {
+                const isImage = loaded.kind === 'image'
+                const imageOnlyTip = strings.workspace.imageToolsPdfNote
+                return (
                 <div className="flex items-center gap-0.5">
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -2525,13 +2528,15 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                         variant="ghost"
                         size="icon"
                         onClick={() => onAdjust('rotate-left')}
-                        disabled={adjusting}
+                        disabled={adjusting || !isImage}
                         aria-label={strings.workspace.adjustRotateLeft}
                       >
                         <RotateCcw className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>{strings.workspace.adjustRotateLeft}</TooltipContent>
+                    <TooltipContent>
+                      {isImage ? strings.workspace.adjustRotateLeft : imageOnlyTip}
+                    </TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -2539,13 +2544,15 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                         variant="ghost"
                         size="icon"
                         onClick={() => onAdjust('rotate-right')}
-                        disabled={adjusting}
+                        disabled={adjusting || !isImage}
                         aria-label={strings.workspace.adjustRotateRight}
                       >
                         <RotateCw className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>{strings.workspace.adjustRotateRight}</TooltipContent>
+                    <TooltipContent>
+                      {isImage ? strings.workspace.adjustRotateRight : imageOnlyTip}
+                    </TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -2553,14 +2560,16 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                         variant={grayscaleActive ? 'default' : 'ghost'}
                         size="icon"
                         onClick={() => onAdjust('grayscale')}
-                        disabled={adjusting}
+                        disabled={adjusting || !isImage}
                         aria-label={strings.workspace.adjustGrayscale}
                         aria-pressed={grayscaleActive}
                       >
                         <Contrast className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>{strings.workspace.adjustGrayscale}</TooltipContent>
+                    <TooltipContent>
+                      {isImage ? strings.workspace.adjustGrayscale : imageOnlyTip}
+                    </TooltipContent>
                   </Tooltip>
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -2568,7 +2577,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                         variant={cropMode ? 'default' : 'ghost'}
                         size="icon"
                         onClick={cropMode ? onCancelCrop : onStartCrop}
-                        disabled={adjusting}
+                        disabled={adjusting || !isImage}
                         aria-label={cropMode ? strings.workspace.adjustCropCancel : strings.workspace.adjustCrop}
                         aria-pressed={cropMode}
                       >
@@ -2576,10 +2585,14 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      {cropMode ? strings.workspace.adjustCropCancel : strings.workspace.adjustCrop}
+                      {!isImage
+                        ? imageOnlyTip
+                        : cropMode
+                          ? strings.workspace.adjustCropCancel
+                          : strings.workspace.adjustCrop}
                     </TooltipContent>
                   </Tooltip>
-                  {cropMode && (
+                  {isImage && cropMode && (
                     <Button
                       size="sm"
                       onClick={onApplyCrop}
@@ -2601,7 +2614,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                           variant={tuneOpen ? 'default' : 'ghost'}
                           size="icon"
                           onClick={onToggleTune}
-                          disabled={adjusting}
+                          disabled={adjusting || !isImage}
                           aria-label={strings.workspace.adjustTuneToggle}
                           aria-pressed={tuneOpen}
                           aria-expanded={tuneOpen}
@@ -2609,9 +2622,11 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                           <SlidersHorizontal className="h-4 w-4" />
                         </Button>
                       </TooltipTrigger>
-                      <TooltipContent>{strings.workspace.adjustTuneToggle}</TooltipContent>
+                      <TooltipContent>
+                        {isImage ? strings.workspace.adjustTuneToggle : imageOnlyTip}
+                      </TooltipContent>
                     </Tooltip>
-                    {tuneOpen && (
+                    {isImage && tuneOpen && (
                       <div
                         role="dialog"
                         aria-label={strings.workspace.adjustTuneToggle}
@@ -2657,13 +2672,15 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                         variant="ghost"
                         size="icon"
                         onClick={onAddAnotherPhoto}
-                        disabled={adjusting}
+                        disabled={adjusting || !isImage}
                         aria-label={strings.workspace.addAnotherPhoto}
                       >
                         <ImagePlus className="h-4 w-4" />
                       </Button>
                     </TooltipTrigger>
-                    <TooltipContent>{strings.workspace.addAnotherPhoto}</TooltipContent>
+                    <TooltipContent>
+                      {isImage ? strings.workspace.addAnotherPhoto : imageOnlyTip}
+                    </TooltipContent>
                   </Tooltip>
                   <input
                     ref={addAnotherPhotoInputRef}
@@ -2673,7 +2690,8 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                     onChange={onAddAnotherPhotoPicked}
                   />
                 </div>
-              )}
+                )
+              })()}
               <span className="text-[11px] font-mono text-muted-foreground shrink-0">
                 {isMultiPage
                   ? strings.workspace.pageStripCurrent(activePageIndex + 1, loaded.base.totalPages)
