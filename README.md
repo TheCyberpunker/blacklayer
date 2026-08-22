@@ -9,9 +9,27 @@
 
 # BlackLayer
 
-Local-first document protection for safer sharing. Add purpose-bound watermarks, redact sensitive areas, remove hidden metadata, and export protected PDFs or images entirely on your device. No uploads, no accounts, no cloud.
+**English.** Local-first document protection for safer sharing. Add purpose-bound watermarks, redact sensitive areas, remove hidden metadata, and export protected PDFs or images entirely on your device. No uploads, no accounts, no cloud.
 
-Status: pre-alpha. The workflow is being built out and things will change.
+**Español.** Protección de documentos local para compartirlos con más seguridad. Añade marcas de agua con destinatario y motivo, tapa zonas sensibles, elimina la información oculta y exporta PDFs o imágenes protegidos sin salir de tu dispositivo. Sin subidas, sin cuentas, sin nube.
+
+Status / Estado: pre-alpha. The workflow is being built out and things will change. / El flujo está en construcción y va a cambiar.
+
+## Who this is for / Casos de uso
+
+Everyday people who need to hand a copy of an identity document, a payslip, a rental agreement or a bank statement to a third party and want to reduce what that third party can do with it afterwards.
+
+Gente normal que tiene que entregar copia de un DNI, una nómina, un contrato de alquiler o un extracto bancario a un tercero y quiere reducir lo que ese tercero puede hacer con esa copia después.
+
+Real, concrete scenarios / Ejemplos reales:
+
+- **Reserving a hotel or a short-term rental.** The Spanish data-protection authority is explicit that a hotel is not entitled to demand a copy of your DNI or passport as a general rule ([AEPD note](https://www.aepd.es/prensa-y-comunicacion/notas-de-prensa/aepd-informa-de-que-no-esta-permitido-solicitar-copia-dni-o-pasaporte-en-hospedajes)). If you decide to hand one over anyway (or you are in a jurisdiction that permits it), the copy that leaves your hands should carry a visible reason and a recipient.
+- **Applying for a rental property.** Rental scams involving photocopies of ID and payslips are common. Both the Catalan cybersecurity agency ([guide on rental scams](https://ciberseguretat.gencat.cat/es/ciutadania/frau-i-suplantacio/estafes-lloguer-dhabitatges)) and mainstream press ([El País — "ojo al último fraude del ladrillo"](https://elpais.com/economia/negocios/2022-09-17/ojo-al-ultimo-fraude-del-ladrillo-llegan-los-pisos-de-alquiler-bonitos-y-baratos-que-no-existen.html)) have flagged the pattern. A watermarked copy bound to that specific agency and purpose is much harder to redeploy against you.
+- **Lawyers and advisors handling client documents.** When you have to forward a client-provided document to a counterparty or an administrative body, the copy that leaves your desk should carry the case reference and the recipient.
+- **Employees sharing a payslip or contract with a landlord, a bank, or an insurer.** A payslip carries salary, bank details, employer and address. A watermark bound to the specific recipient makes casual reuse traceable.
+- **Anyone who has ever felt uncomfortable sending a photo of their DNI over WhatsApp or email.** ([Short walk-through of why that is a real risk](https://www.youtube.com/watch?v=EuzYjT5Twew).)
+
+BlackLayer does not stop determined fraud on its own; nothing visual can. It raises the cost, and it removes the "silent, reusable, clean copy" from the equation.
 
 ## Why this exists
 
