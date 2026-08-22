@@ -52,13 +52,13 @@ export function drawWavyPage({
   ctx.textAlign = 'left'
   ctx.textBaseline = 'middle'
 
-  // rowGap must always leave at least one fontSize of clear space between the
-  // furthest reach of adjacent rows, even at max waviness. Previous constants
-  // (rowGap 2.8, amplitude 1.0) left only 0.8 fontSize and the peaks touched.
+  // rowGap must always leave enough clear space between the furthest reach of
+  // adjacent rows, even at max waviness. Wavelength kept short enough that the
+  // pattern reads as many small waves per row, not two big lazy curves.
   const w = Math.max(0, Math.min(1, waviness))
-  const amplitude = fontSize * (0.55 * w)
-  const rowGap = fontSize * (2.4 + w * 1.4)
-  const wavelength = Math.max(fontSize * 8, width * 0.55)
+  const amplitude = fontSize * (0.9 * w)
+  const rowGap = fontSize * (2.6 + w * 1.6)
+  const wavelength = Math.max(fontSize * 4, width * 0.2)
   const omega = (2 * Math.PI) / wavelength
   const rng = mulberry32(seed || 1)
 
