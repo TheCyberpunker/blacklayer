@@ -7,6 +7,12 @@
 
 <p align="center"><strong>Local-first document protection for safer sharing.</strong></p>
 
+<p align="center">
+  <img src="demo/01-compare-maximum.png" alt="BlackLayer comparing an original Spanish DNI on the left with the same document watermarked and stamped with a security pattern on the right" width="900">
+</p>
+
+<p align="center"><em>Drop a document, name the recipient and the purpose, and BlackLayer bakes a repeated watermark into the pixels together with an optional security pattern. Metadata is stripped in the same pass. Everything runs in your browser — nothing is uploaded.</em></p>
+
 # BlackLayer
 
 **English.** Local-first document protection for safer sharing. Add purpose-bound watermarks, redact sensitive areas, remove hidden metadata, and export protected PDFs or images entirely on your device. No uploads, no accounts, no cloud.
@@ -15,7 +21,7 @@
 
 ## Screenshots
 
-See [`demo/`](demo/README.md) for five annotated screenshots walking through the maximum-protection comparison, the protected result, the copy tab with zoom, the advanced controls, and manual pixelate redaction on a sample Spanish DNI.
+The image above shows the compare view. See [`demo/`](demo/README.md) for four more annotated screenshots: the protected result on its own, the copy tab with zoom, the advanced controls, and manual pixelate redaction — all on the same sample Spanish DNI.
 
 ## Who this is for / Casos de uso
 
