@@ -196,6 +196,9 @@ export interface Strings {
     commonCancel: string
     commonDelete: string
     commonContinue: string
+    commonDone: string
+    moreOptions: string
+    customTextEnable: string
     presetsSaveTitle: string
     presetsSaveInputLabel: string
     presetsClearAllTitle: string
@@ -495,6 +498,9 @@ export const enStrings: Strings = {
     commonCancel: 'Cancel',
     commonDelete: 'Delete',
     commonContinue: 'Continue',
+    commonDone: 'Done',
+    moreOptions: 'More options',
+    customTextEnable: 'Use a custom watermark text',
     presetsSaveTitle: 'Save preset',
     presetsSaveInputLabel: 'Preset name',
     presetsClearAllTitle: 'Delete all presets?',
@@ -800,6 +806,9 @@ export const esStrings: Strings = {
     commonCancel: 'Cancelar',
     commonDelete: 'Eliminar',
     commonContinue: 'Continuar',
+    commonDone: 'Listo',
+    moreOptions: 'Más opciones',
+    customTextEnable: 'Usar un texto de marca personalizado',
     presetsSaveTitle: 'Guardar preajuste',
     presetsSaveInputLabel: 'Nombre del preajuste',
     presetsClearAllTitle: '¿Eliminar todos los preajustes?',

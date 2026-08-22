@@ -15,6 +15,7 @@ import {
   Loader2,
   Monitor,
   Moon,
+  MoreHorizontal,
   Plus,
   Shield,
   ShieldCheck,
@@ -2589,6 +2590,8 @@ function Workspace(props: WorkspaceProps): JSX.Element {
   // tab area, always visible.
   type SidebarTab = 'copia' | 'proteccion' | 'plantilla' | 'avanzado'
   const [sidebarTab, setSidebarTab] = useState<SidebarTab>('copia')
+  // Editing custom watermark text in a Dialog keeps the Avanzado tab short.
+  const [customTextDialogOpen, setCustomTextDialogOpen] = useState(false)
 
   return (
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px] xl:grid-cols-[minmax(0,1fr)_460px] gap-8 xl:gap-10 animate-fade-in">
@@ -3134,9 +3137,9 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           })}
         </div>
 
-        {/* Tab content. No fixed heights; each tab is short enough to fit within
-            the sidebar's sticky viewport without scroll (see individual panels
-            below for their compact layouts). */}
+        {/* Tab content. Each tab is sized to fit within the sidebar's sticky
+            viewport with the Protect CTA below still visible. Custom text
+            (Avanzado) opens in a Dialog to avoid pushing this over its budget. */}
         <div className="min-h-0">
           {sidebarTab === 'copia' && (
             <section className="space-y-3" aria-label={strings.workspace.tabCopia}>
@@ -3339,21 +3342,39 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                   />
                 </div>
               </div>
-              <CustomTextBlock
-                enabled={customEnabled}
-                onToggle={onToggleCustom}
-                value={customText}
-                onChange={onCustomText}
-                strings={strings}
-              />
-              <button
-                type="button"
-                onClick={onDeleteAllLocalSettings}
-                className="flex items-center gap-2 text-left text-xs text-destructive hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
-              >
-                <Trash2 className="h-3.5 w-3.5 shrink-0" />
-                <span>{strings.workspace.deleteLocalSettings}</span>
-              </button>
+              <div className="flex items-center justify-between gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setCustomTextDialogOpen(true)}
+                  className="inline-flex items-center gap-2 text-xs text-foreground hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring rounded"
+                >
+                  <FileText className="h-3.5 w-3.5" />
+                  {strings.workspace.customizeText}
+                  {customEnabled && (
+                    <span className="ml-1 h-1.5 w-1.5 rounded-full bg-foreground" aria-label="on" />
+                  )}
+                </button>
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      aria-label={strings.workspace.moreOptions}
+                      className="p-1.5 -mr-1 rounded hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                    >
+                      <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end">
+                    <DropdownMenuItem
+                      onSelect={(e) => { e.preventDefault(); onDeleteAllLocalSettings() }}
+                      className="text-destructive"
+                    >
+                      <Trash2 className="h-3.5 w-3.5" />
+                      <span>{strings.workspace.deleteLocalSettings}</span>
+                    </DropdownMenuItem>
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              </div>
             </section>
           )}
         </div>
@@ -3419,6 +3440,40 @@ function Workspace(props: WorkspaceProps): JSX.Element {
         </>
         )}
       </aside>
+
+      <Dialog open={customTextDialogOpen} onOpenChange={setCustomTextDialogOpen}>
+        <DialogContent className="max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{strings.workspace.customizeText}</DialogTitle>
+            <DialogDescription>{strings.workspace.customTextHint}</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={customEnabled}
+                onChange={onToggleCustom}
+                className="h-4 w-4 rounded border-input accent-foreground"
+              />
+              <span className="text-sm">{strings.workspace.customTextEnable}</span>
+            </label>
+            {customEnabled && (
+              <textarea
+                aria-label={strings.workspace.customTextLabel}
+                value={customText}
+                onChange={(e) => onCustomText(e.target.value)}
+                rows={5}
+                className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background resize-none"
+              />
+            )}
+          </div>
+          <DialogFooter>
+            <Button onClick={() => setCustomTextDialogOpen(false)}>
+              {strings.workspace.commonDone}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
@@ -4789,8 +4844,8 @@ function CustomTextBlock({
           aria-label={strings.workspace.customTextLabel}
           value={value}
           onChange={(e) => onChange(e.target.value)}
-          rows={4}
-          className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-sm font-mono transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background resize-y"
+          rows={3}
+          className="mt-2 w-full rounded-md border border-input bg-background px-3 py-2 text-xs font-mono transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background resize-none"
         />
       )}
     </div>
