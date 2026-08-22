@@ -3295,52 +3295,6 @@ function Workspace(props: WorkspaceProps): JSX.Element {
 
           {sidebarTab === 'avanzado' && (
             <section className="space-y-4" aria-label={strings.workspace.tabAvanzado}>
-              {loaded.kind === 'pdf' && (
-                <div className="space-y-1.5">
-                  <span className="text-[11px] font-mono uppercase tracking-wider text-muted-foreground">
-                    {strings.workspace.outputFormatLabel}
-                  </span>
-                  <div
-                    role="radiogroup"
-                    aria-label={strings.workspace.outputFormatLabel}
-                    className="grid grid-cols-2 gap-1 p-1 rounded-md bg-muted"
-                  >
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={outputFormat === 'pdf'}
-                      onClick={() => onOutputFormatChange('pdf')}
-                      className={cn(
-                        'h-8 text-xs font-medium rounded transition-colors',
-                        outputFormat === 'pdf'
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground',
-                      )}
-                    >
-                      {strings.workspace.outputFormatPdf}
-                    </button>
-                    <button
-                      type="button"
-                      role="radio"
-                      aria-checked={outputFormat === 'images'}
-                      onClick={() => onOutputFormatChange('images')}
-                      className={cn(
-                        'h-8 text-xs font-medium rounded transition-colors',
-                        outputFormat === 'images'
-                          ? 'bg-background text-foreground shadow-sm'
-                          : 'text-muted-foreground hover:text-foreground',
-                      )}
-                    >
-                      {strings.workspace.outputFormatImages}
-                    </button>
-                  </div>
-                  <p className="text-[11px] text-muted-foreground/80 leading-snug">
-                    {outputFormat === 'images'
-                      ? strings.workspace.outputFormatImagesHint
-                      : strings.workspace.outputFormatPdfHint}
-                  </p>
-                </div>
-              )}
               <StyleSliders
                 opacity={opacity}
                 rotationDeg={rotationDeg}
@@ -3409,6 +3363,51 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           <div className="rounded-lg border border-destructive/40 bg-destructive/5 p-3 flex items-start gap-2 text-xs text-destructive">
             <AlertTriangle className="h-4 w-4 shrink-0 mt-px" />
             <span>{strings.workspace.signatureWarning}</span>
+          </div>
+        )}
+
+        {/* Output format lives next to the CTA, not in Ajustes, because it is a
+            download decision not a protection setting. Only shown when it
+            actually offers a choice: a multi-page PDF. */}
+        {loaded.kind === 'pdf' && loaded.base.totalPages > 1 && (
+          <div className="flex items-center gap-2 text-xs">
+            <span className="text-muted-foreground shrink-0">
+              {strings.workspace.outputFormatLabel}:
+            </span>
+            <div
+              role="radiogroup"
+              aria-label={strings.workspace.outputFormatLabel}
+              className="flex-1 grid grid-cols-2 gap-1 p-0.5 rounded-md bg-muted"
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={outputFormat === 'pdf'}
+                onClick={() => onOutputFormatChange('pdf')}
+                className={cn(
+                  'h-7 text-[11px] font-medium rounded transition-colors',
+                  outputFormat === 'pdf'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {strings.workspace.outputFormatPdf}
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={outputFormat === 'images'}
+                onClick={() => onOutputFormatChange('images')}
+                className={cn(
+                  'h-7 text-[11px] font-medium rounded transition-colors',
+                  outputFormat === 'images'
+                    ? 'bg-background text-foreground shadow-sm'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {strings.workspace.outputFormatImages}
+              </button>
+            </div>
           </div>
         )}
 
