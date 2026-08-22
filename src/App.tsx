@@ -55,6 +55,7 @@ import {
   DialogTitle,
 } from './components/ui/dialog.tsx'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './components/ui/tooltip.tsx'
+import { Onboarding, type OnboardingStep } from './components/ui/onboarding.tsx'
 import {
   ConfirmDialog,
   PromptDialog,
@@ -166,28 +167,44 @@ export function App(): JSX.Element {
   const t = useMemo(() => getStrings(lang), [lang])
   const [howOpen, setHowOpen] = useState(false)
   const [privacyOpen, setPrivacyOpen] = useState(false)
+  // First-run guided tour. Fires the first time a document is loaded (so all
+  // tour targets exist in the DOM). Users can also relaunch it from the
+  // "How it works" dialog. Marked done in localStorage on first completion.
+  const [tourActive, setTourActive] = useState(false)
 
-  // First-run onboarding: auto-open the "How it works" dialog once per browser,
-  // shortly after mount so the UI settles first. Marking `seen-intro` the
-  // moment the dialog opens (not on close) so a reload before closing does
-  // not re-trigger it — the user has already been shown the intro.
+  // First-run intro: the guided tour below now takes over as the first-run
+  // experience. The "How it works" dialog is still available from the header
+  // and via "Show me around", it just no longer auto-opens on landing.
   useEffect(() => {
     if (typeof window === 'undefined') return
     try {
-      if (window.localStorage.getItem('blacklayer.seen-intro') === '1') return
-    } catch {
-      return
-    }
-    const id = window.setTimeout(() => {
-      setHowOpen(true)
-      try {
-        window.localStorage.setItem('blacklayer.seen-intro', '1')
-      } catch {
-        // storage disabled or quota full — accept the intro re-showing next time
-      }
-    }, 600)
-    return () => window.clearTimeout(id)
+      // Mark intro as seen so the previous auto-open path can't kick in for
+      // users who last visited before the tour existed.
+      window.localStorage.setItem('blacklayer.seen-intro', '1')
+    } catch { /* storage disabled */ }
   }, [])
+
+  // Guided tour: fire once on first document load, then flag as seen. Sits on
+  // top of the workspace UI, spotlights tabs → recipient → compare → redact →
+  // Protect, and marks done in localStorage as soon as it opens so a reload
+  // mid-tour doesn't re-trigger.
+  const endTour = useCallback(() => {
+    setTourActive(false)
+  }, [])
+  const startTour = useCallback(() => {
+    setTourActive(true)
+    try {
+      window.localStorage.setItem('blacklayer.seen-tour', '1')
+    } catch { /* storage disabled */ }
+  }, [])
+  const tourSteps = useMemo<readonly OnboardingStep[]>(() => ([
+    { target: '[data-tour="drop"]', title: t.tour.steps.drop.title, body: t.tour.steps.drop.body, side: 'bottom' },
+    { target: '[data-tour="tabs"]', title: t.tour.steps.tabs.title, body: t.tour.steps.tabs.body, side: 'left' },
+    { target: '[data-tour="recipient"]', title: t.tour.steps.recipient.title, body: t.tour.steps.recipient.body, side: 'left' },
+    { target: '[data-tour="compare"]', title: t.tour.steps.compare.title, body: t.tour.steps.compare.body, side: 'bottom' },
+    { target: '[data-tour="redact"]', title: t.tour.steps.redact.title, body: t.tour.steps.redact.body, side: 'bottom' },
+    { target: '[data-tour="protect"]', title: t.tour.steps.protect.title, body: t.tour.steps.protect.body, side: 'left' },
+  ]), [t])
 
   const [loading, setLoading] = useState(false)
   const [loaded, setLoaded] = useState<LoadedFile | null>(null)
@@ -305,6 +322,29 @@ export function App(): JSX.Element {
       setSourceMetadata(null)
     }
   }, [loaded])
+  // Tour trigger fires once for a first-time visitor. Starts on landing (step
+  // 0 highlights the drop zone), then auto-advances as the workspace mounts
+  // and each subsequent target appears. Marked done in localStorage on open
+  // so a reload mid-tour won't re-fire.
+  const tourFiredRef = useRef(false)
+  useEffect(() => {
+    if (batch.length > 0 || tourFiredRef.current) return
+    let seen = false
+    try {
+      seen = window.localStorage.getItem('blacklayer.seen-tour') === '1'
+    } catch {
+      seen = true
+    }
+    if (seen) return
+    tourFiredRef.current = true
+    const id = window.setTimeout(() => {
+      setTourActive(true)
+      try {
+        window.localStorage.setItem('blacklayer.seen-tour', '1')
+      } catch { /* storage disabled */ }
+    }, 1200)
+    return () => window.clearTimeout(id)
+  }, [batch.length])
   // Read source PDF metadata whenever a PDF is loaded; used by the dialog
   // to show what is currently embedded in the file the user picked.
   useEffect(() => {
@@ -2132,7 +2172,24 @@ export function App(): JSX.Element {
           )}
         </div>
       )}
-      <HowItWorksDialog open={howOpen} onOpenChange={setHowOpen} strings={t} />
+      <HowItWorksDialog
+        open={howOpen}
+        onOpenChange={setHowOpen}
+        strings={t}
+        onStartTour={batch.length === 0 ? () => { setHowOpen(false); startTour() } : undefined}
+      />
+      <Onboarding
+        active={tourActive && batch.length === 0}
+        onDone={endTour}
+        steps={tourSteps}
+        labels={{
+          step: t.tour.step,
+          next: t.tour.next,
+          prev: t.tour.prev,
+          done: t.tour.done,
+          skip: t.tour.skip,
+        }}
+      />
       <PrivacyDialog open={privacyOpen} onOpenChange={setPrivacyOpen} strings={t} />
       <ConfirmDialog
         open={!!confirmState?.open}
@@ -2371,10 +2428,12 @@ function HowItWorksDialog({
   open,
   onOpenChange,
   strings,
+  onStartTour,
 }: {
   open: boolean
   onOpenChange: (open: boolean) => void
   strings: Strings
+  onStartTour?: () => void
 }): JSX.Element {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -2391,7 +2450,13 @@ function HowItWorksDialog({
             </li>
           ))}
         </ol>
-        <DialogFooter>
+        <DialogFooter className="gap-2 sm:justify-between">
+          {onStartTour ? (
+            <Button variant="ghost" onClick={onStartTour}>
+              <Sparkles className="h-4 w-4" />
+              {strings.tour.restart}
+            </Button>
+          ) : <span />}
           <DialogClose asChild>
             <Button>{strings.dialogs.howClose}</Button>
           </DialogClose>
@@ -2479,6 +2544,7 @@ function HeroDrop({
       </p>
 
       <label
+        data-tour="drop"
         onDrop={onDrop}
         onDragOver={onDragOver}
         onDragLeave={onDragLeave}
@@ -2937,11 +3003,13 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           )}
         >
           <div className="mb-3 flex items-center justify-between gap-3 flex-wrap">
-            <ComparePicker
-              value={compareMode}
-              onChange={onCompareModeChange}
-              strings={strings}
-            />
+            <div data-tour="compare">
+              <ComparePicker
+                value={compareMode}
+                onChange={onCompareModeChange}
+                strings={strings}
+              />
+            </div>
             <div className="flex items-center gap-2">
               {(() => {
                 const isImage = loaded.kind === 'image'
@@ -3163,6 +3231,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                 variant={redactMode ? 'default' : 'outline'}
                 size="sm"
                 onClick={onToggleRedactMode}
+                data-tour="redact"
               >
                 {redactMode ? (
                   <>
@@ -3440,7 +3509,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
         ) : (
         <>
         {/* Tab strip. All tabs sit here, only the active one's content renders below. */}
-        <div role="tablist" aria-label="Ajustes del documento" className="grid grid-cols-4 gap-1 p-1 rounded-md bg-muted">
+        <div role="tablist" aria-label="Ajustes del documento" data-tour="tabs" className="grid grid-cols-4 gap-1 p-1 rounded-md bg-muted">
           {([
             { id: 'copia' as const, label: strings.workspace.tabCopia },
             { id: 'proteccion' as const, label: strings.workspace.tabProteccion },
@@ -3473,7 +3542,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             (Avanzado) opens in a Dialog to avoid pushing this over its budget. */}
         <div className="min-h-0">
           {sidebarTab === 'copia' && (
-            <section className="space-y-3" aria-label={strings.workspace.tabCopia}>
+            <section className="space-y-3" aria-label={strings.workspace.tabCopia} data-tour="recipient">
               <div className="space-y-1.5">
                 <Label htmlFor="recipient">{strings.workspace.recipient}</Label>
                 <Input
@@ -3791,7 +3860,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           </div>
         )}
 
-        <Button onClick={onProtect} disabled={!canProtect} size="lg" className="w-full">
+        <Button onClick={onProtect} disabled={!canProtect} size="lg" className="w-full" data-tour="protect">
           {working ? strings.workspace.working : strings.workspace.protect}
         </Button>
 

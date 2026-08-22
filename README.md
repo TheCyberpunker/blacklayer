@@ -13,8 +13,6 @@
 
 **Español.** Protección de documentos local para compartirlos con más seguridad. Añade marcas de agua con destinatario y motivo, tapa zonas sensibles, elimina la información oculta y exporta PDFs o imágenes protegidos sin salir de tu dispositivo. Sin subidas, sin cuentas, sin nube.
 
-Status / Estado: pre-alpha. The workflow is being built out and things will change. / El flujo está en construcción y va a cambiar.
-
 ## Who this is for / Casos de uso
 
 Everyday people who need to hand a copy of an identity document, a payslip, a rental agreement or a bank statement to a third party and want to reduce what that third party can do with it afterwards.

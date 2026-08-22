@@ -25,6 +25,22 @@ export interface Strings {
     privacyLimits: string
     privacyLimitBullets: string[]
   }
+  tour: {
+    step: (current: number, total: number) => string
+    next: string
+    prev: string
+    done: string
+    skip: string
+    restart: string
+    steps: {
+      drop: { title: string; body: string }
+      tabs: { title: string; body: string }
+      recipient: { title: string; body: string }
+      compare: { title: string; body: string }
+      redact: { title: string; body: string }
+      protect: { title: string; body: string }
+    }
+  }
   hero: {
     title: string
     subtitle: string
@@ -324,6 +340,40 @@ export const enStrings: Strings = {
       'Once you share a copy with someone, its downstream use is out of scope.',
       'BlackLayer is an open-source tool provided as-is. See the LICENSE file.',
     ],
+  },
+  tour: {
+    step: (current, total) => `Step ${current} of ${total}`,
+    next: 'Next',
+    prev: 'Back',
+    done: 'Got it',
+    skip: 'Skip tour',
+    restart: 'Show me around',
+    steps: {
+      drop: {
+        title: 'Start here — drop a document',
+        body: 'Drop a PDF, JPG, PNG or WebP over this area, or click to pick one. The file is read on your device and never leaves it.',
+      },
+      tabs: {
+        title: 'Everything you can change is here',
+        body: 'Four short tabs, one thing each. Copy: who it goes to and why. Protection: how strong. Template: fields to hide by default on ID cards. Advanced: colors, size, and details.',
+      },
+      recipient: {
+        title: 'Start with the recipient and the purpose',
+        body: 'BlackLayer writes those two words across the whole document as a watermark. If a copy ends up somewhere it should not be, you can see who received it and what for.',
+      },
+      compare: {
+        title: 'Compare original and protected',
+        body: 'Slide between the original, the protected version, and a side-by-side view. Use it to check nothing important got covered before you download.',
+      },
+      redact: {
+        title: 'Hide anything else you want',
+        body: 'Turn this on to draw over anything the automatic template did not cover: a signature, a face, a phone number, a barcode. The area is destroyed at the pixel level, not just covered.',
+      },
+      protect: {
+        title: 'When it looks right, download',
+        body: 'The protected copy is built in your browser and offered as a download. Your original file is never touched.',
+      },
+    },
   },
   hero: {
     title: 'Protect documents before sharing them',
@@ -646,6 +696,40 @@ export const esStrings: Strings = {
       'Cuando compartes una copia con alguien, su uso posterior queda fuera del alcance.',
       'BlackLayer es una herramienta de código abierto, provista "tal cual". Consulta el archivo LICENSE.',
     ],
+  },
+  tour: {
+    step: (current, total) => `Paso ${current} de ${total}`,
+    next: 'Siguiente',
+    prev: 'Atrás',
+    done: 'Hecho',
+    skip: 'Saltar tour',
+    restart: 'Enseñame por dónde empezar',
+    steps: {
+      drop: {
+        title: 'Empieza aquí — suelta un documento',
+        body: 'Arrastra un PDF, JPG, PNG o WebP sobre esta zona, o haz clic para elegir uno. El archivo se lee en tu dispositivo y no sale de él.',
+      },
+      tabs: {
+        title: 'Aquí están todas las opciones',
+        body: 'Cuatro pestañas cortas, una cosa cada una. Copia: para quién y para qué es. Protección: cuánta protección quieres. Plantilla: qué campos tapar por defecto en documentos de identidad. Avanzado: colores, tamaño y detalles.',
+      },
+      recipient: {
+        title: 'Empieza por el destinatario y el motivo',
+        body: 'BlackLayer escribe esos dos datos por todo el documento como marca de agua. Si la copia acaba donde no debería, se ve quién la recibió y para qué.',
+      },
+      compare: {
+        title: 'Compara el original con la copia protegida',
+        body: 'Cambia entre el original, la copia protegida y una vista lado a lado. Úsalo para comprobar que no has tapado nada importante antes de descargar.',
+      },
+      redact: {
+        title: 'Tapa cualquier zona extra',
+        body: 'Activa esto para dibujar sobre lo que la plantilla no cubre por defecto: una firma, una cara, un teléfono, un código. La zona se destruye a nivel de píxel, no se tapa por encima.',
+      },
+      protect: {
+        title: 'Cuando esté como quieres, descarga',
+        body: 'La copia protegida se genera en tu navegador y se ofrece como descarga. Tu archivo original no se toca en ningún momento.',
+      },
+    },
   },
   hero: {
     title: 'Protege tus documentos antes de compartirlos',
