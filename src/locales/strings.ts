@@ -190,6 +190,7 @@ export interface Strings {
     addAnotherPromptTitle: string
     addAnotherPromptDismiss: string
     addAnotherPromptAction: string
+    addAnotherPromptChip: string
     selectionHint: string
     deleteSelected: string
     commonConfirm: string
@@ -492,6 +493,7 @@ export const enStrings: Strings = {
     addAnotherPromptTitle: 'Have a second photo of the same document?',
     addAnotherPromptAction: 'Add another photo',
     addAnotherPromptDismiss: 'No, continue',
+    addAnotherPromptChip: 'Second photo?',
     selectionHint: 'Click a hidden area to move or resize it. Delete removes it, Esc deselects.',
     deleteSelected: 'Delete selected',
     commonConfirm: 'Confirm',
@@ -800,6 +802,7 @@ export const esStrings: Strings = {
     addAnotherPromptTitle: '¿Tienes una segunda foto del mismo documento?',
     addAnotherPromptAction: 'Añadir otra foto',
     addAnotherPromptDismiss: 'No, continuar',
+    addAnotherPromptChip: '¿Segunda foto?',
     selectionHint: 'Toca una zona oculta para moverla o cambiar su tamaño. Supr la elimina, Esc deselecciona.',
     deleteSelected: 'Eliminar selección',
     commonConfirm: 'Confirmar',

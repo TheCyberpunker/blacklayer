@@ -2597,16 +2597,18 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     <div className="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_420px] xl:grid-cols-[minmax(0,1fr)_460px] gap-8 xl:gap-10 animate-fade-in">
       {/* Preview */}
       <section className="min-w-0">
-        {/* Single meta row: file identity + detection + OCR + clear. Merged
-            from two rows to give the canvas more vertical real estate. */}
-        <div className="mb-3 flex items-center gap-3 flex-wrap">
-          <div className="flex items-center gap-2 text-sm min-w-0 max-w-full">
+        {/* Meta row: everything about identity + optional actions in one line.
+            Filename truncates, Descartar isolated on the right, and the
+            "second photo" chip appears inline (not as a full banner) when
+            the doc is an ID card and the user hasn't dismissed it. */}
+        <div className="mb-3 flex items-center gap-3 min-w-0">
+          <div className="flex items-center gap-2 text-sm min-w-0 flex-1">
             {loaded.kind === 'pdf' ? (
               <FileText className="h-4 w-4 text-muted-foreground shrink-0" />
             ) : (
               <ImageIcon className="h-4 w-4 text-muted-foreground shrink-0" />
             )}
-            <span className="font-medium truncate" title={loaded.file.name}>
+            <span className="font-medium truncate min-w-0" title={loaded.file.name}>
               {loaded.file.name}
             </span>
             <span className="text-xs text-muted-foreground font-mono shrink-0">
@@ -2614,14 +2616,14 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               {strings.workspace.fileSize(sizeKb)}
             </span>
           </div>
-          <DetectionBadge
-            detection={detection}
-            strings={strings}
-            onOverride={onOverrideDetection}
-            inline
-          />
-          {!detection.manual &&
-            detection.confidence !== 'high' && (
+          <div className="flex items-center gap-2 shrink-0 flex-wrap justify-end">
+            <DetectionBadge
+              detection={detection}
+              strings={strings}
+              onOverride={onOverrideDetection}
+              inline
+            />
+            {!detection.manual && detection.confidence !== 'high' && (
               <Tooltip>
                 <TooltipTrigger asChild>
                   <Button
@@ -2640,35 +2642,36 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                 <TooltipContent>{strings.workspace.ocrHint}</TooltipContent>
               </Tooltip>
             )}
-          <Button variant="ghost" size="sm" onClick={onClear} className="ml-auto">
-            <X className="h-4 w-4" />
-            {strings.workspace.clear}
-          </Button>
-        </div>
-
-        {addAnotherPromptOpen &&
-          loaded.kind === 'image' &&
-          loaded.base.totalPages === 1 &&
-          // Only surface the "add another photo" prompt when the loaded doc
-          // is likely an identity card with a front and a back side. Passports
-          // are a single data page, invoices are one photo, etc. Otherwise
-          // this reads as noise.
-          (detection.type === 'identity' || detection.type === 'driving_licence') && (
-          <div className="mb-3 rounded-lg border border-foreground/60 bg-foreground/5 p-3 flex flex-wrap items-center justify-between gap-3 animate-fade-in">
-            <p className="text-sm">
-              {strings.workspace.addAnotherPromptTitle}
-            </p>
-            <div className="flex items-center gap-2 shrink-0">
-              <Button variant="ghost" size="sm" onClick={onDismissAddAnotherPrompt}>
-                {strings.workspace.addAnotherPromptDismiss}
-              </Button>
-              <Button size="sm" onClick={onAddAnotherPhoto}>
-                <ImagePlus className="h-4 w-4" />
-                {strings.workspace.addAnotherPromptAction}
-              </Button>
-            </div>
+            {addAnotherPromptOpen &&
+              loaded.kind === 'image' &&
+              loaded.base.totalPages === 1 &&
+              (detection.type === 'identity' || detection.type === 'driving_licence') && (
+                <div className="inline-flex items-center gap-1.5 h-7 pl-2.5 pr-1 rounded-full border border-foreground/40 bg-foreground/5 text-[11px] animate-fade-in">
+                  <span className="text-foreground">{strings.workspace.addAnotherPromptChip}</span>
+                  <button
+                    type="button"
+                    onClick={onAddAnotherPhoto}
+                    className="inline-flex items-center gap-1 h-5 px-2 rounded-full bg-foreground text-background hover:bg-foreground/90 transition-colors"
+                  >
+                    <ImagePlus className="h-3 w-3" />
+                    {strings.workspace.addAnotherPromptAction}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={onDismissAddAnotherPrompt}
+                    aria-label={strings.workspace.addAnotherPromptDismiss}
+                    className="inline-flex items-center justify-center h-5 w-5 rounded-full text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+                  >
+                    <X className="h-3 w-3" />
+                  </button>
+                </div>
+              )}
+            <Button variant="ghost" size="sm" onClick={onClear}>
+              <Trash2 className="h-4 w-4" />
+              {strings.workspace.clear}
+            </Button>
           </div>
-        )}
+        </div>
 
         <div
           className={cn(
@@ -2858,6 +2861,35 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                 </div>
                 )
               })()}
+              <div className="mx-2 h-6 w-px bg-border" aria-hidden="true" />
+              <Button
+                variant={redactMode ? 'default' : 'outline'}
+                size="sm"
+                onClick={onToggleRedactMode}
+              >
+                {redactMode ? (
+                  <>
+                    <Check className="h-4 w-4" />
+                    {strings.workspace.redactStop}
+                  </>
+                ) : (
+                  <>
+                    <Eraser className="h-4 w-4" />
+                    {strings.workspace.redactStart}
+                  </>
+                )}
+              </Button>
+              {isPdf && (
+                <RailSearchIcon
+                  strings={strings}
+                  searchQuery={searchQuery}
+                  onSearchQueryChange={onSearchQueryChange}
+                  searching={searching}
+                  searchSummary={searchSummary}
+                  onRunSearch={onRunSearch}
+                  onClearSearch={onClearSearch}
+                />
+              )}
               <span className="text-[11px] font-mono text-muted-foreground shrink-0">
                 {isMultiPage
                   ? strings.workspace.pageStripCurrent(activePageIndex + 1, loaded.base.totalPages)
@@ -2866,29 +2898,24 @@ function Workspace(props: WorkspaceProps): JSX.Element {
             </div>
           </div>
 
-          <RedactToolbar
-            redactMode={redactMode}
-            onToggleRedactMode={onToggleRedactMode}
-            redactStyle={redactStyle}
-            onRedactStyleChange={onRedactStyleChange}
-            redactSolidColor={redactSolidColor}
-            onRedactSolidColorChange={onRedactSolidColorChange}
-            onUndoRedaction={onUndoRedaction}
-            onClearRedactions={onClearRedactions}
-            activePageRedactionsCount={activePageRedactionsCount}
-            redactionsCount={redactionsCount}
-            selectedRectId={selectedRectId}
-            onDeleteSelectedRect={onDeleteSelectedRect}
-            isPdf={isPdf}
-            searchQuery={searchQuery}
-            onSearchQueryChange={onSearchQueryChange}
-            searching={searching}
-            searchSummary={searchSummary}
-            onRunSearch={onRunSearch}
-            onClearSearch={onClearSearch}
-            isMultiPage={isMultiPage}
-            strings={strings}
-          />
+          {/* Secondary redact strip. Only mounted when redact mode is on so it
+              doesn't steal vertical space in the common view-only state. */}
+          {redactMode && (
+            <RedactSecondaryStrip
+              redactStyle={redactStyle}
+              onRedactStyleChange={onRedactStyleChange}
+              redactSolidColor={redactSolidColor}
+              onRedactSolidColorChange={onRedactSolidColorChange}
+              onUndoRedaction={onUndoRedaction}
+              onClearRedactions={onClearRedactions}
+              activePageRedactionsCount={activePageRedactionsCount}
+              redactionsCount={redactionsCount}
+              selectedRectId={selectedRectId}
+              onDeleteSelectedRect={onDeleteSelectedRect}
+              isMultiPage={isMultiPage}
+              strings={strings}
+            />
+          )}
 
           <div className="relative w-full aspect-[3/4] sm:aspect-auto sm:min-h-[520px] bg-white rounded-lg overflow-hidden shadow-sm">
             <canvas
@@ -4342,9 +4369,117 @@ function ComparePicker({
   )
 }
 
-function RedactToolbar({
-  redactMode,
-  onToggleRedactMode,
+/**
+ * Search-in-PDF trigger for the canvas rail. Icon-only button that opens a
+ * small anchored popover with the input + result summary. Lives outside the
+ * secondary strip because it does not require redact mode to be active.
+ */
+function RailSearchIcon({
+  strings,
+  searchQuery,
+  onSearchQueryChange,
+  searching,
+  searchSummary,
+  onRunSearch,
+  onClearSearch,
+}: {
+  strings: Strings
+  searchQuery: string
+  onSearchQueryChange: (v: string) => void
+  searching: boolean
+  searchSummary: { matches: number; pages: number } | null
+  onRunSearch: () => void
+  onClearSearch: () => void
+}): JSX.Element {
+  const [open, setOpen] = useState(false)
+  const tooShort = searchQuery.trim().length > 0 && searchQuery.trim().length < 2
+  return (
+    <div className="relative">
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <Button
+            variant={open ? 'default' : 'ghost'}
+            size="icon"
+            onClick={() => setOpen((v) => !v)}
+            aria-label={strings.workspace.searchTitle}
+            aria-expanded={open}
+          >
+            <Search className="h-4 w-4" />
+          </Button>
+        </TooltipTrigger>
+        <TooltipContent>{strings.workspace.searchTitle}</TooltipContent>
+      </Tooltip>
+      {open && (
+        <div
+          role="dialog"
+          aria-label={strings.workspace.searchTitle}
+          className="absolute right-0 top-full mt-2 z-30 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-popover text-popover-foreground p-3 space-y-2 shadow-lg animate-fade-in"
+        >
+          <div className="flex items-center gap-2 text-xs">
+            <Search className="h-3.5 w-3.5 text-muted-foreground" />
+            <span className="font-medium text-foreground">{strings.workspace.searchTitle}</span>
+          </div>
+          <div className="flex gap-2">
+            <Input
+              type="search"
+              value={searchQuery}
+              onChange={(e) => onSearchQueryChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !searching && !tooShort && searchQuery.trim()) {
+                  e.preventDefault()
+                  onRunSearch()
+                }
+              }}
+              placeholder={strings.workspace.searchPlaceholder}
+              autoComplete="off"
+              maxLength={120}
+              className="flex-1 h-9 text-xs"
+            />
+            <Button
+              size="sm"
+              variant="outline"
+              onClick={onRunSearch}
+              disabled={searching || tooShort || !searchQuery.trim()}
+            >
+              {searching ? strings.workspace.searchWorking : strings.workspace.searchRun}
+            </Button>
+          </div>
+          {tooShort && (
+            <p className="text-[11px] text-muted-foreground/80">{strings.workspace.searchTooShort}</p>
+          )}
+          {searchSummary && (
+            <div className="flex items-center justify-between text-[11px]">
+              <span className="text-muted-foreground font-mono">
+                {searchSummary.matches > 0
+                  ? strings.workspace.searchResults(searchSummary.matches, searchSummary.pages)
+                  : strings.workspace.searchNoResults}
+              </span>
+              {searchSummary.matches > 0 && (
+                <button
+                  type="button"
+                  onClick={onClearSearch}
+                  className="text-muted-foreground hover:text-destructive transition-colors"
+                >
+                  {strings.workspace.searchClear}
+                </button>
+              )}
+            </div>
+          )}
+          <p className="text-[11px] text-muted-foreground/80">
+            {strings.workspace.searchLimitationsPdfOnly}
+          </p>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Secondary redact strip that appears BELOW the canvas rail only when the
+ * user has activated redact mode. Holds the style dropdown, color chip,
+ * undo, clear, delete-selected. The primary toggle lives in the rail above.
+ */
+function RedactSecondaryStrip({
   redactStyle,
   onRedactStyleChange,
   redactSolidColor,
@@ -4355,18 +4490,9 @@ function RedactToolbar({
   redactionsCount,
   selectedRectId,
   onDeleteSelectedRect,
-  isPdf,
-  searchQuery,
-  onSearchQueryChange,
-  searching,
-  searchSummary,
-  onRunSearch,
-  onClearSearch,
   isMultiPage,
   strings,
 }: {
-  redactMode: boolean
-  onToggleRedactMode: () => void
   redactStyle: RedactionMode
   onRedactStyleChange: (m: RedactionMode) => void
   redactSolidColor: string
@@ -4377,44 +4503,16 @@ function RedactToolbar({
   redactionsCount: number
   selectedRectId: string | null
   onDeleteSelectedRect: () => void
-  isPdf: boolean
-  searchQuery: string
-  onSearchQueryChange: (v: string) => void
-  searching: boolean
-  searchSummary: { matches: number; pages: number } | null
-  onRunSearch: () => void
-  onClearSearch: () => void
   isMultiPage: boolean
   strings: Strings
 }): JSX.Element {
-  const [searchOpen, setSearchOpen] = useState(false)
   const styleLabels: Record<RedactionMode, string> = {
     solid: strings.workspace.redactModeSolid,
     blur: strings.workspace.redactModeBlur,
     pixelate: strings.workspace.redactModePixelate,
   }
-  const tooShort = searchQuery.trim().length > 0 && searchQuery.trim().length < 2
-
   return (
-    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-border bg-background/60 px-2 py-2">
-      <Button
-        variant={redactMode ? 'default' : 'outline'}
-        size="sm"
-        onClick={onToggleRedactMode}
-      >
-        {redactMode ? (
-          <>
-            <Check className="h-4 w-4" />
-            {strings.workspace.redactStop}
-          </>
-        ) : (
-          <>
-            <Eraser className="h-4 w-4" />
-            {strings.workspace.redactStart}
-          </>
-        )}
-      </Button>
-
+    <div className="mb-3 flex flex-wrap items-center gap-2 rounded-md border border-border bg-background/60 px-2 py-2 animate-fade-in">
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button variant="outline" size="sm">
@@ -4430,7 +4528,6 @@ function RedactToolbar({
           ))}
         </DropdownMenuContent>
       </DropdownMenu>
-
       {redactStyle === 'solid' && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -4450,7 +4547,6 @@ function RedactToolbar({
           <TooltipContent>{strings.workspace.redactSolidColor}</TooltipContent>
         </Tooltip>
       )}
-
       <Tooltip>
         <TooltipTrigger asChild>
           <Button
@@ -4465,117 +4561,24 @@ function RedactToolbar({
         </TooltipTrigger>
         <TooltipContent>{strings.workspace.redactUndo}</TooltipContent>
       </Tooltip>
-
       {redactionsCount > 0 && (
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={onClearRedactions}
-        >
+        <Button variant="ghost" size="sm" onClick={onClearRedactions}>
           {strings.workspace.redactClear}
         </Button>
       )}
-
       {selectedRectId && (
-        <Button
-          variant="outline"
-          size="sm"
-          onClick={onDeleteSelectedRect}
-        >
+        <Button variant="outline" size="sm" onClick={onDeleteSelectedRect}>
           <X className="h-4 w-4" />
           {strings.workspace.deleteSelected}
         </Button>
       )}
-
-      {isPdf && (
-        <div className="relative">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Button
-                variant={searchOpen ? 'default' : 'ghost'}
-                size="icon"
-                onClick={() => setSearchOpen((v) => !v)}
-                aria-label={strings.workspace.searchTitle}
-                aria-expanded={searchOpen}
-              >
-                <Search className="h-4 w-4" />
-              </Button>
-            </TooltipTrigger>
-            <TooltipContent>{strings.workspace.searchTitle}</TooltipContent>
-          </Tooltip>
-          {searchOpen && (
-            <div
-              role="dialog"
-              aria-label={strings.workspace.searchTitle}
-              className="absolute left-0 top-full mt-2 z-30 w-80 max-w-[calc(100vw-2rem)] rounded-lg border border-border bg-popover text-popover-foreground p-3 space-y-2 shadow-lg animate-fade-in"
-            >
-              <div className="flex items-center gap-2 text-xs">
-                <Search className="h-3.5 w-3.5 text-muted-foreground" />
-                <span className="font-medium text-foreground">{strings.workspace.searchTitle}</span>
-              </div>
-              <div className="flex gap-2">
-                <Input
-                  type="search"
-                  value={searchQuery}
-                  onChange={(e) => onSearchQueryChange(e.target.value)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter' && !searching && !tooShort && searchQuery.trim()) {
-                      e.preventDefault()
-                      onRunSearch()
-                    }
-                  }}
-                  placeholder={strings.workspace.searchPlaceholder}
-                  autoComplete="off"
-                  maxLength={120}
-                  className="flex-1 h-9 text-xs"
-                />
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={onRunSearch}
-                  disabled={searching || tooShort || !searchQuery.trim()}
-                >
-                  {searching ? strings.workspace.searchWorking : strings.workspace.searchRun}
-                </Button>
-              </div>
-              {tooShort && (
-                <p className="text-[11px] text-muted-foreground/80">{strings.workspace.searchTooShort}</p>
-              )}
-              {searchSummary && (
-                <div className="flex items-center justify-between text-[11px]">
-                  <span className="text-muted-foreground font-mono">
-                    {searchSummary.matches > 0
-                      ? strings.workspace.searchResults(searchSummary.matches, searchSummary.pages)
-                      : strings.workspace.searchNoResults}
-                  </span>
-                  {searchSummary.matches > 0 && (
-                    <button
-                      type="button"
-                      onClick={onClearSearch}
-                      className="text-muted-foreground hover:text-destructive transition-colors"
-                    >
-                      {strings.workspace.searchClear}
-                    </button>
-                  )}
-                </div>
-              )}
-              <p className="text-[11px] text-muted-foreground/80">
-                {strings.workspace.searchLimitationsPdfOnly}
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
       <div className="ml-auto flex items-center gap-3 text-[11px] font-mono text-muted-foreground">
-        {redactMode && (
-          <span className="text-foreground/70">{strings.workspace.redactHint}</span>
-        )}
+        <span className="text-foreground/70">{strings.workspace.redactHint}</span>
         {redactionsCount > 0 && (
           <span>{strings.workspace.redactCount(redactionsCount)}</span>
         )}
-        {isMultiPage && redactMode && (
-          <span title={strings.workspace.redactPdfLimitation} className="text-muted-foreground/70">
+        {isMultiPage && (
+          <span title={strings.workspace.redactPdfLimitation} className="text-muted-foreground/70 hidden xl:inline">
             {strings.workspace.redactPdfLimitation}
           </span>
         )}
