@@ -204,6 +204,11 @@ export interface Strings {
     toastLocalSettingsCleared: string
     toastSearchDone: (matches: number, pages: number) => string
     toastRedactionsCleared: string
+    toastOcrConfident: (label: string) => string
+    toastOcrInconclusive: string
+    ocrAnalyze: string
+    ocrRunning: string
+    ocrHint: string
   }
   result: {
     ready: string
@@ -477,6 +482,11 @@ export const enStrings: Strings = {
         ? 'No matches found'
         : `${matches} match${matches === 1 ? '' : 'es'} hidden across ${pages} page${pages === 1 ? '' : 's'}`,
     toastRedactionsCleared: 'Hidden regions cleared',
+    toastOcrConfident: (label) => `Text confirms ${label}`,
+    toastOcrInconclusive: 'No document markers found in the text',
+    ocrAnalyze: 'Analyze text',
+    ocrRunning: 'Analyzing text',
+    ocrHint: 'Read the visible text to refine detection. Runs locally, may take a few seconds.',
   },
   result: {
     ready: 'Your protected copy is ready',
@@ -750,6 +760,11 @@ export const esStrings: Strings = {
         ? 'Sin coincidencias'
         : `${matches} coincidencia${matches === 1 ? '' : 's'} ocultada${matches === 1 ? '' : 's'} en ${pages} página${pages === 1 ? '' : 's'}`,
     toastRedactionsCleared: 'Zonas ocultas eliminadas',
+    toastOcrConfident: (label) => `El texto confirma ${label}`,
+    toastOcrInconclusive: 'No se encontraron marcadores del documento',
+    ocrAnalyze: 'Analizar texto',
+    ocrRunning: 'Analizando texto',
+    ocrHint: 'Lee el texto visible para afinar la detección. Se ejecuta en local, puede tardar unos segundos.',
   },
   result: {
     ready: 'Tu copia protegida está lista',

@@ -1,6 +1,9 @@
 setup/
 docs/
 
+# OCR assets fetched at build time (see scripts/fetch-ocr-assets.mjs)
+public/tesseract/
+
 # Node / Vite
 node_modules/
 dist/

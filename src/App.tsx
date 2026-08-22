@@ -34,7 +34,7 @@ import { purposesFor, recommendedLevel } from './core/detect/templates.ts'
 import { templateFor, type CardSide, type DocumentTemplate, type FieldRect, type TemplateProfile } from './core/templates/index.ts'
 import { generateSeed } from './core/random/seed.ts'
 import { hexToRgb01, rgb01ToHex } from './lib/color.ts'
-import { Contrast, Crop, ImagePlus, RotateCcw, RotateCw, Search, SlidersHorizontal } from 'lucide-react'
+import { Contrast, Crop, ImagePlus, RotateCcw, RotateCw, ScanText, Search, SlidersHorizontal } from 'lucide-react'
 import { Button } from './components/ui/button.tsx'
 import { Input } from './components/ui/input.tsx'
 import { Label } from './components/ui/label.tsx'
@@ -217,6 +217,8 @@ export function App(): JSX.Element {
   const [searching, setSearching] = useState(false)
   const [searchSummary, setSearchSummary] = useState<{ matches: number; pages: number } | null>(null)
   const [adjusting, setAdjusting] = useState(false)
+  const [ocrRunning, setOcrRunning] = useState(false)
+  const [ocrProgress, setOcrProgress] = useState(0)
   // Image adjustments live as flags on top of an immutable original file.
   // Every toggle re-derives the working file from the original, so grayscale is
   // reversible and rotations always start from the same base.
@@ -761,6 +763,43 @@ export function App(): JSX.Element {
     setLang(navigator.language?.toLowerCase().startsWith('es') ? 'es' : 'en')
     pushToast(t.workspace.toastLocalSettingsCleared)
   }, [clearPresets, setTheme, setLang, t, confirmAction, pushToast])
+
+  const runOcrDetection = useCallback(async () => {
+    if (!loaded || loaded.kind !== 'image' || ocrRunning) return
+    setOcrRunning(true)
+    setOcrProgress(0)
+    try {
+      const { runOcr } = await import('./core/ocr/ocr.ts')
+      const { detectFromOcrText } = await import('./core/detect/detect.ts')
+      const result = await runOcr(loaded.file, lang, (p) => {
+        // Two phases fire status callbacks: "loading language traineddata"
+        // (0..1) and "recognizing text" (0..1). Splice into a single 0..1
+        // bar so the user always sees motion.
+        if (p.status === 'loading language traineddata') {
+          setOcrProgress(Math.max(0, Math.min(0.5, p.progress * 0.5)))
+        } else if (p.status === 'recognizing text') {
+          setOcrProgress(Math.max(0.5, Math.min(1, 0.5 + p.progress * 0.5)))
+        } else if (typeof p.progress === 'number' && p.progress > 0) {
+          // Any other phase (initializing, loading core…) bumps the bar a bit
+          // so it never sits at 0 for long.
+          setOcrProgress((prev) => Math.max(prev, Math.min(0.15, p.progress)))
+        }
+      })
+      const next = detectFromOcrText(detection, result.text)
+      setDetection(next)
+      pushToast(
+        next.type !== 'unknown' && next.confidence === 'high'
+          ? t.workspace.toastOcrConfident(t.workspace.detectionLabel[next.type])
+          : t.workspace.toastOcrInconclusive,
+      )
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err)
+      pushToast(`${t.errors.failed}: ${msg}`, 'destructive')
+    } finally {
+      setOcrRunning(false)
+      setOcrProgress(0)
+    }
+  }, [loaded, ocrRunning, lang, detection, pushToast, t])
 
   const overrideDetection = useCallback((type: DocumentType) => {
     setDetection((prev) => {
@@ -1741,6 +1780,9 @@ export function App(): JSX.Element {
             levelTouched={levelTouched}
             detection={detection}
             onOverrideDetection={overrideDetection}
+            onAnalyzeText={runOcrDetection}
+            ocrRunning={ocrRunning}
+            ocrProgress={ocrProgress}
             onApplyRecommended={applyRecommendedLevel}
             onLevelChange={setLevelManual}
             onRecipient={setRecipient}
@@ -2236,6 +2278,9 @@ interface WorkspaceProps {
   levelTouched: boolean
   detection: DetectionResult
   onOverrideDetection: (type: DocumentType) => void
+  onAnalyzeText: () => void
+  ocrRunning: boolean
+  ocrProgress: number
   onApplyRecommended: () => void
   onLevelChange: (l: ProtectionLevel) => void
   onRecipient: (v: string) => void
@@ -2354,6 +2399,9 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     levelTouched,
     detection,
     onOverrideDetection,
+    onAnalyzeText,
+    ocrRunning,
+    ocrProgress,
     onApplyRecommended,
     onLevelChange,
     onRecipient,
@@ -2481,11 +2529,35 @@ function Workspace(props: WorkspaceProps): JSX.Element {
           </Button>
         </div>
 
-        <DetectionBadge
-          detection={detection}
-          strings={strings}
-          onOverride={onOverrideDetection}
-        />
+        <div className="mb-3 flex items-center gap-2 flex-wrap">
+          <DetectionBadge
+            detection={detection}
+            strings={strings}
+            onOverride={onOverrideDetection}
+            inline
+          />
+          {loaded.kind === 'image' &&
+            !detection.manual &&
+            detection.confidence !== 'high' && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={onAnalyzeText}
+                    disabled={ocrRunning}
+                    className="h-7 gap-1.5 text-[11px]"
+                  >
+                    <ScanText className="h-3.5 w-3.5" />
+                    {ocrRunning
+                      ? `${strings.workspace.ocrRunning}${ocrProgress > 0 ? ` ${Math.round(ocrProgress * 100)}%` : ''}`
+                      : strings.workspace.ocrAnalyze}
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>{strings.workspace.ocrHint}</TooltipContent>
+              </Tooltip>
+            )}
+        </div>
 
         {addAnotherPromptOpen && loaded.kind === 'image' && loaded.base.totalPages === 1 && (
           <div className="mb-3 rounded-lg border border-foreground/60 bg-foreground/5 p-3 flex flex-wrap items-center justify-between gap-3 animate-fade-in">
@@ -3111,10 +3183,16 @@ function DetectionBadge({
   detection,
   strings,
   onOverride,
+  inline = false,
 }: {
   detection: DetectionResult
   strings: Strings
   onOverride: (type: DocumentType) => void
+  /**
+   * When true, skip the outer margin+layout wrapper so the caller can compose
+   * the badge into a shared row (e.g. next to an OCR button).
+   */
+  inline?: boolean
 }): JSX.Element | null {
   if (detection.type === 'unknown' && !detection.manual && detection.confidence === 'unknown') {
     return null
@@ -3126,8 +3204,12 @@ function DetectionBadge({
     : strings.workspace.detected(typeLabel)
   const showLow = detection.confidence === 'low'
 
+  const Wrapper: (props: { children: React.ReactNode }) => JSX.Element = inline
+    ? ({ children }) => <>{children}</>
+    : ({ children }) => <div className="mb-3 flex items-center gap-2 flex-wrap">{children}</div>
+
   return (
-    <div className="mb-3 flex items-center gap-2 flex-wrap">
+    <Wrapper>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <button
@@ -3166,7 +3248,7 @@ function DetectionBadge({
           {strings.workspace.detectedManual}
         </span>
       )}
-    </div>
+    </Wrapper>
   )
 }
 

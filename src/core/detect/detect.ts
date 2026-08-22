@@ -113,6 +113,84 @@ async function extractPdfFirstPageText(file: File): Promise<string> {
   }
 }
 
+/**
+ * Re-score a detection against text extracted by OCR (from an image). Adds the
+ * OCR pattern hits to whatever heuristics already fired (filename, aspect) and
+ * returns a fresh DetectionResult. If OCR fires no rule, returns the input
+ * unchanged so callers can safely always apply this.
+ *
+ * OCR output is noisy — line breaks between words, dropped diacritics, glyph
+ * misreads — so we normalize before matching: collapse whitespace, strip
+ * diacritics, lowercase. Patterns are normalized the same way so authors can
+ * still write them with accents (`españa`) or word breaks and they still hit.
+ */
+export function detectFromOcrText(
+  current: DetectionResult,
+  ocrText: string,
+): DetectionResult {
+  const trimmed = ocrText.trim()
+  if (!trimmed) return current
+
+  const normalize = (s: string): string =>
+    s
+      .toLowerCase()
+      .normalize('NFKD')
+      .replace(/[̀-ͯ]/g, '')
+      .replace(/\s+/g, ' ')
+      .trim()
+
+  const normalizedText = normalize(trimmed)
+
+  const scores = new Map<string, Score>()
+  const bump = (partial: Omit<Score, 'reasons'>, reason: string): void => {
+    const key = `${partial.type}|${partial.subtype ?? ''}|${partial.country}`
+    const existing = scores.get(key)
+    if (existing) {
+      existing.weight += partial.weight
+      existing.reasons.push(reason)
+    } else {
+      scores.set(key, { ...partial, reasons: [reason] })
+    }
+  }
+
+  // Carry over the existing signal (weight inferred from confidence tier).
+  if (current.type !== 'unknown') {
+    const carryWeight = current.confidence === 'high' ? 4 : current.confidence === 'medium' ? 2 : 1
+    bump(
+      { type: current.type, subtype: current.subtype, country: current.country, weight: carryWeight },
+      'previous detection',
+    )
+  }
+
+  let ocrHits = 0
+  for (const rule of RULES) {
+    for (const pat of rule.patterns) {
+      if (normalizedText.includes(normalize(pat))) {
+        ocrHits += 1
+        bump(
+          { type: rule.type, subtype: rule.subtype, country: rule.country, weight: rule.weight },
+          `OCR contains "${pat}"`,
+        )
+      }
+    }
+  }
+  if (!ocrHits) return current
+
+  const summarized = summarize(scores)
+
+  // If OCR fired at least one rule for the winning type/subtype specifically,
+  // we treat the detection as high-confidence — OCR is a deliberate, expensive
+  // step and a positive match on the same type the heuristics already favoured
+  // should be enough to unlock the template panel.
+  const bestKey = `${summarized.type}|${summarized.subtype ?? ''}|${summarized.country}`
+  const bestScore = scores.get(bestKey)
+  const ocrConfirmedBest = bestScore?.reasons.some((r) => r.startsWith('OCR contains ')) ?? false
+  const confidence: Confidence =
+    ocrConfirmedBest && summarized.type !== 'unknown' ? 'high' : summarized.confidence
+
+  return { ...summarized, confidence, manual: current.manual }
+}
+
 function summarize(scores: Map<string, Score>): DetectionResult {
   if (scores.size === 0) return UNKNOWN_DETECTION
 

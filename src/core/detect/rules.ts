@@ -36,6 +36,26 @@ export const RULES: Rule[] = [
     weight: 2,
     patterns: ['dni', 'españa', 'espana'],
   },
+  // Short markers commonly readable by OCR on a DNI 4.0 card (front + back
+  // + MRZ). Each on its own is not definitive, but any one raises the base
+  // score above "low" and multiple together push to high confidence.
+  {
+    type: 'identity',
+    subtype: 'dni',
+    country: 'ES',
+    weight: 1,
+    patterns: [
+      'apellidos',
+      'nacionalidad esp',
+      'idesp',
+      'equipo',
+      'nacimiento',
+      'validez',
+      'ministerio del interior',
+      'direccion general de la policia',
+      'dirección general de la policía',
+    ],
+  },
 
   // Spanish NIE / TIE
   {
@@ -64,6 +84,22 @@ export const RULES: Rule[] = [
     country: 'unknown',
     weight: 3,
     patterns: ['passport', 'pasaporte', 'reisepass', 'passeport'],
+  },
+  {
+    type: 'passport',
+    subtype: 'passport',
+    country: 'unknown',
+    weight: 1,
+    patterns: [
+      'p<esp',
+      'given names',
+      'surname',
+      'nombres',
+      'nationality',
+      'date of birth',
+      'place of birth',
+      'lugar de nacimiento',
+    ],
   },
 
   // Driving licence
