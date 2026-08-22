@@ -96,10 +96,13 @@ export interface Strings {
     patternIridescentHint: string
     patternGuillocheLabel: string
     patternGuillocheHint: string
+    patternMoireLabel: string
+    patternMoireHint: string
     appliedCrosshatch: string
     appliedFrame: string
     appliedIridescent: string
     appliedGuilloche: string
+    appliedMoire: string
     presetsLabel: string
     presetsEmptyHint: string
     presetsSave: string
@@ -360,10 +363,13 @@ export const enStrings: Strings = {
     patternIridescentHint: 'A decorative rainbow gradient with a fine dot texture. Distinctly visible as a user-added watermark, not a real security foil.',
     patternGuillocheLabel: 'Add guilloche curves',
     patternGuillocheHint: 'Interwoven Lissajous curves in the style of banknote line-work. Purely decorative, not a claim of authenticity.',
+    patternMoireLabel: 'Add moiré fringe',
+    patternMoireHint: 'Two fine line grids at slightly different angles that beat against each other. Anti-copy pattern historically used to distort photocopies of the document.',
     appliedCrosshatch: 'Crosshatch pattern applied',
     appliedFrame: 'Border frame applied',
     appliedIridescent: 'Iridescent overlay applied',
     appliedGuilloche: 'Guilloche curves applied',
+    appliedMoire: 'Moiré fringe applied',
     presetsLabel: 'Presets',
     presetsEmptyHint: 'Save the current recipient, purpose, and protection level as a preset for next time.',
     presetsSave: 'Save current as preset',
@@ -629,10 +635,13 @@ export const esStrings: Strings = {
     patternIridescentHint: 'Un degradado decorativo con una textura de puntos fina. Se ve claramente como una marca añadida, no como un holograma real de seguridad.',
     patternGuillocheLabel: 'Añadir curvas de guilloche',
     patternGuillocheHint: 'Curvas de Lissajous entrelazadas al estilo de las líneas de billetes y certificados. Es decorativo, no acredita autenticidad.',
+    patternMoireLabel: 'Añadir muaré',
+    patternMoireHint: 'Dos rejillas finas con ángulos ligeramente distintos que se interfieren entre sí. Patrón anticopia que distorsiona las fotocopias del documento.',
     appliedCrosshatch: 'Patrón de trama aplicado',
     appliedFrame: 'Marco aplicado',
     appliedIridescent: 'Capa iridiscente aplicada',
     appliedGuilloche: 'Curvas de guilloche aplicadas',
+    appliedMoire: 'Muaré aplicado',
     presetsLabel: 'Ajustes guardados',
     presetsEmptyHint: 'Guarda el destinatario, motivo y nivel actuales como un ajuste para la próxima vez.',
     presetsSave: 'Guardar como ajuste',

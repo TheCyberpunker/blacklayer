@@ -61,8 +61,53 @@ export function drawWatermarkOnCanvas({
 
   if (options.patterns.iridescent) drawIridescent(ctx, width, height, options)
   if (options.patterns.guilloche) drawGuilloche(ctx, width, height, options, colorBase)
+  if (options.patterns.moire) drawMoire(ctx, width, height, options, colorBase)
   if (options.patterns.crosshatch) drawCrosshatch(ctx, width, height, options, colorBase)
   if (options.patterns.frame) drawFrame(ctx, width, height, options, colorBase)
+}
+
+/**
+ * Moiré interference overlay — two fine parallel grids drawn on top of each
+ * other with slightly different angles. Where the lines cross at low angles
+ * they produce the visible beat pattern that gives moiré its distinctive
+ * shimmer. Anti-copy printing has used it for decades because a photocopy or
+ * downscaled screenshot distorts the fringe visibly. Low opacity keeps the
+ * document readable underneath.
+ */
+function drawMoire(
+  ctx: CanvasRenderingContext2D,
+  width: number,
+  height: number,
+  options: WatermarkOptions,
+  colorBase: (alpha: number) => string,
+): void {
+  const scaleFactor = Math.min(width, height) / 800
+  const spacing = Math.max(3, 4.5 * scaleFactor)
+  const alpha = Math.max(0.09, Math.min(0.22, options.opacity * 0.42))
+  const stroke = Math.max(0.5, 0.7 * scaleFactor)
+  const diagonal = Math.hypot(width, height)
+
+  const drawGrid = (angleDeg: number) => {
+    ctx.save()
+    ctx.translate(width / 2, height / 2)
+    ctx.rotate((angleDeg * Math.PI) / 180)
+    ctx.beginPath()
+    for (let y = -diagonal; y <= diagonal; y += spacing) {
+      ctx.moveTo(-diagonal, y)
+      ctx.lineTo(diagonal, y)
+    }
+    ctx.stroke()
+    ctx.restore()
+  }
+
+  ctx.save()
+  ctx.strokeStyle = colorBase(alpha)
+  ctx.lineWidth = stroke
+  // Two grids ~7° apart — small enough that the interference fringe reads,
+  // large enough that neither grid looks like a simple screen texture.
+  drawGrid(11)
+  drawGrid(18)
+  ctx.restore()
 }
 
 /**

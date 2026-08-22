@@ -207,6 +207,7 @@ export function App(): JSX.Element {
   const [frameOverride, setFrameOverride] = useState<boolean | null>(null)
   const [iridescentOverride, setIridescentOverride] = useState<boolean | null>(null)
   const [guillocheOverride, setGuillocheOverride] = useState<boolean | null>(null)
+  const [moireOverride, setMoireOverride] = useState<boolean | null>(null)
   const [opacityOverride, setOpacityOverride] = useState<number | null>(null)
   const [rotationOverride, setRotationOverride] = useState<number | null>(null)
   const [fontSizeOverride, setFontSizeOverride] = useState<number | null>(null)
@@ -321,13 +322,14 @@ export function App(): JSX.Element {
           frame: frameOverride ?? undefined,
           iridescent: iridescentOverride ?? undefined,
           guilloche: guillocheOverride ?? undefined,
+          moire: moireOverride ?? undefined,
           opacity: opacityOverride ?? undefined,
           rotationDeg: rotationOverride ?? undefined,
           fontSize: fontSizeOverride ?? undefined,
           color: colorOverride ? hexToRgb01(colorOverride) : undefined,
         },
       ),
-    [level, debouncedRecipient, debouncedPurpose, lang, effectiveCustom, docSeed, crosshatchOverride, frameOverride, iridescentOverride, guillocheOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride],
+    [level, debouncedRecipient, debouncedPurpose, lang, effectiveCustom, docSeed, crosshatchOverride, frameOverride, iridescentOverride, guillocheOverride, moireOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride],
   )
 
   const activePageRedactions = redactionsByPage.get(activePageIndex) ?? []
@@ -671,6 +673,7 @@ export function App(): JSX.Element {
     setFrameOverride(p.frame)
     setIridescentOverride(p.iridescent)
     setGuillocheOverride(p.guilloche)
+    setMoireOverride(p.moire)
     setOpacityOverride(p.opacity)
     setRotationOverride(p.rotationDeg)
     setFontSizeOverride(p.fontSize)
@@ -702,6 +705,7 @@ export function App(): JSX.Element {
       frame: frameOverride,
       iridescent: iridescentOverride,
       guilloche: guillocheOverride,
+      moire: moireOverride,
       opacity: opacityOverride,
       rotationDeg: rotationOverride,
       fontSize: fontSizeOverride,
@@ -716,6 +720,7 @@ export function App(): JSX.Element {
     frameOverride,
     iridescentOverride,
     guillocheOverride,
+    moireOverride,
     opacityOverride,
     rotationOverride,
     fontSizeOverride,
@@ -798,6 +803,7 @@ export function App(): JSX.Element {
           frame: frameOverride ?? undefined,
           iridescent: iridescentOverride ?? undefined,
           guilloche: guillocheOverride ?? undefined,
+          moire: moireOverride ?? undefined,
           opacity: opacityOverride ?? undefined,
           rotationDeg: rotationOverride ?? undefined,
           fontSize: fontSizeOverride ?? undefined,
@@ -846,7 +852,7 @@ export function App(): JSX.Element {
     } finally {
       setWorking(false)
     }
-  }, [loaded, level, recipient, purpose, lang, customEnabled, customText, redactionsByPage, docSeed, crosshatchOverride, frameOverride, iridescentOverride, guillocheOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride, t, clearOutput])
+  }, [loaded, level, recipient, purpose, lang, customEnabled, customText, redactionsByPage, docSeed, crosshatchOverride, frameOverride, iridescentOverride, guillocheOverride, moireOverride, opacityOverride, rotationOverride, fontSizeOverride, colorOverride, t, clearOutput])
 
   const protectBatch = useCallback(async () => {
     if (!batch.length) return
@@ -878,6 +884,7 @@ export function App(): JSX.Element {
             frame: frameOverride ?? undefined,
             iridescent: iridescentOverride ?? undefined,
             guilloche: guillocheOverride ?? undefined,
+            moire: moireOverride ?? undefined,
           },
         )
 
@@ -913,7 +920,7 @@ export function App(): JSX.Element {
     }
 
     setBatchProgress(null)
-  }, [batch, batchZipUrl, level, recipient, purpose, lang, customEnabled, customText, crosshatchOverride, frameOverride, iridescentOverride, guillocheOverride])
+  }, [batch, batchZipUrl, level, recipient, purpose, lang, customEnabled, customText, crosshatchOverride, frameOverride, iridescentOverride, guillocheOverride, moireOverride])
 
   const buildZip = useCallback(async () => {
     const done = batch.filter((it) => it.status === 'done' && it.outputBlob)
@@ -1685,10 +1692,12 @@ export function App(): JSX.Element {
             frameOn={previewProfile.watermark.patterns.frame}
             iridescentOn={previewProfile.watermark.patterns.iridescent}
             guillocheOn={previewProfile.watermark.patterns.guilloche}
+            moireOn={previewProfile.watermark.patterns.moire}
             onCrosshatchChange={(v) => setCrosshatchOverride(v)}
             onFrameChange={(v) => setFrameOverride(v)}
             onIridescentChange={(v) => setIridescentOverride(v)}
             onGuillocheChange={(v) => setGuillocheOverride(v)}
+            onMoireChange={(v) => setMoireOverride(v)}
             customEnabled={customEnabled}
             customText={customText}
             onToggleCustom={() => setCustomEnabled((v) => !v)}
@@ -1742,10 +1751,12 @@ export function App(): JSX.Element {
             frameOn={previewProfile.watermark.patterns.frame}
             iridescentOn={previewProfile.watermark.patterns.iridescent}
             guillocheOn={previewProfile.watermark.patterns.guilloche}
+            moireOn={previewProfile.watermark.patterns.moire}
             onCrosshatchChange={(v) => setCrosshatchOverride(v)}
             onFrameChange={(v) => setFrameOverride(v)}
             onIridescentChange={(v) => setIridescentOverride(v)}
             onGuillocheChange={(v) => setGuillocheOverride(v)}
+            onMoireChange={(v) => setMoireOverride(v)}
             opacity={previewProfile.watermark.opacity}
             rotationDeg={previewProfile.watermark.rotationDeg}
             fontSize={previewProfile.watermark.fontSize}
@@ -2235,10 +2246,12 @@ interface WorkspaceProps {
   frameOn: boolean
   iridescentOn: boolean
   guillocheOn: boolean
+  moireOn: boolean
   onCrosshatchChange: (v: boolean) => void
   onFrameChange: (v: boolean) => void
   onIridescentChange: (v: boolean) => void
   onGuillocheChange: (v: boolean) => void
+  onMoireChange: (v: boolean) => void
   opacity: number
   rotationDeg: number
   fontSize: number
@@ -2351,10 +2364,12 @@ function Workspace(props: WorkspaceProps): JSX.Element {
     frameOn,
     iridescentOn,
     guillocheOn,
+    moireOn,
     onCrosshatchChange,
     onFrameChange,
     onIridescentChange,
     onGuillocheChange,
+    onMoireChange,
     opacity,
     rotationDeg,
     fontSize,
@@ -2970,6 +2985,12 @@ function Workspace(props: WorkspaceProps): JSX.Element {
                 checked={guillocheOn}
                 onChange={onGuillocheChange}
               />
+              <PatternToggle
+                label={strings.workspace.patternMoireLabel}
+                hint={strings.workspace.patternMoireHint}
+                checked={moireOn}
+                onChange={onMoireChange}
+              />
               <CustomTextBlock
                 enabled={customEnabled}
                 onToggle={onToggleCustom}
@@ -3050,6 +3071,7 @@ function Workspace(props: WorkspaceProps): JSX.Element {
               {frameOn && <AppliedItem>{strings.workspace.appliedFrame}</AppliedItem>}
               {iridescentOn && <AppliedItem>{strings.workspace.appliedIridescent}</AppliedItem>}
               {guillocheOn && <AppliedItem>{strings.workspace.appliedGuilloche}</AppliedItem>}
+              {moireOn && <AppliedItem>{strings.workspace.appliedMoire}</AppliedItem>}
               {redactionsCount > 0 && (
                 <AppliedItem>{strings.result.appliedRedactions(redactionsCount)}</AppliedItem>
               )}
@@ -3254,10 +3276,12 @@ interface BatchWorkspaceProps {
   frameOn: boolean
   iridescentOn: boolean
   guillocheOn: boolean
+  moireOn: boolean
   onCrosshatchChange: (v: boolean) => void
   onFrameChange: (v: boolean) => void
   onIridescentChange: (v: boolean) => void
   onGuillocheChange: (v: boolean) => void
+  onMoireChange: (v: boolean) => void
   customEnabled: boolean
   customText: string
   onToggleCustom: () => void
@@ -3293,10 +3317,12 @@ function BatchWorkspace(props: BatchWorkspaceProps): JSX.Element {
     frameOn,
     iridescentOn,
     guillocheOn,
+    moireOn,
     onCrosshatchChange,
     onFrameChange,
     onIridescentChange,
     onGuillocheChange,
+    onMoireChange,
     customEnabled,
     customText,
     onToggleCustom,
@@ -3474,6 +3500,12 @@ function BatchWorkspace(props: BatchWorkspaceProps): JSX.Element {
                 hint={strings.workspace.patternGuillocheHint}
                 checked={guillocheOn}
                 onChange={onGuillocheChange}
+              />
+              <PatternToggle
+                label={strings.workspace.patternMoireLabel}
+                hint={strings.workspace.patternMoireHint}
+                checked={moireOn}
+                onChange={onMoireChange}
               />
               <CustomTextBlock
                 enabled={customEnabled}

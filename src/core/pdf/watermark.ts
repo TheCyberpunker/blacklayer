@@ -78,7 +78,10 @@ async function drawWatermarkOnPdfPage(
   const rowText = anyLines ? lines.filter((l) => l.trim()).join('  ·  ') : ''
   const willTileText = anyLines && options.tile
   const needsCanvasStamp =
-    willTileText || options.patterns.iridescent || options.patterns.guilloche
+    willTileText ||
+    options.patterns.iridescent ||
+    options.patterns.guilloche ||
+    options.patterns.moire
 
   if (anyLines && !options.tile) {
     drawPdfBlock(page, lines, font, width / 2, height / 2, options.rotationDeg, options.fontSize, options.opacity, color)
@@ -86,10 +89,10 @@ async function drawWatermarkOnPdfPage(
 
   if (needsCanvasStamp) {
     if (canUseCanvas) {
-      // Browser export: render wavy + iridescent + guilloche onto one offscreen
-      // canvas and embed as a single PNG stamp per page. One drawImage beats
-      // thousands of per-glyph text ops and lets the canvas-only overlays
-      // (iridescent gradient, guilloche curves) reach the exported artifact.
+      // Browser export: render wavy + iridescent + guilloche + moire onto one
+      // offscreen canvas and embed as a single PNG stamp per page. One drawImage
+      // beats thousands of per-glyph text ops and lets the canvas-only overlays
+      // (iridescent gradient, guilloche curves, moire fringe) reach the export.
       await drawPdfCanvasStamp(pdf, page, rowText, width, height, options, {
         renderWavy: willTileText,
       })

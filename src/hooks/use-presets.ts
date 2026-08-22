@@ -12,6 +12,7 @@ export interface Preset {
   frame: boolean | null
   iridescent: boolean | null
   guilloche: boolean | null
+  moire: boolean | null
   /** Style overrides. null on any field means "keep the level default". */
   opacity: number | null
   rotationDeg: number | null
@@ -58,7 +59,7 @@ function isPreset(x: unknown): x is Preset {
  */
 function withStyleDefaults(p: Preset): Preset {
   const withDefaults = p as Preset &
-    Partial<Record<'opacity' | 'rotationDeg' | 'fontSize' | 'colorHex' | 'iridescent' | 'guilloche', unknown>>
+    Partial<Record<'opacity' | 'rotationDeg' | 'fontSize' | 'colorHex' | 'iridescent' | 'guilloche' | 'moire', unknown>>
   return {
     ...p,
     opacity: typeof withDefaults.opacity === 'number' ? withDefaults.opacity : null,
@@ -67,6 +68,7 @@ function withStyleDefaults(p: Preset): Preset {
     colorHex: typeof withDefaults.colorHex === 'string' ? withDefaults.colorHex : null,
     iridescent: typeof withDefaults.iridescent === 'boolean' ? withDefaults.iridescent : null,
     guilloche: typeof withDefaults.guilloche === 'boolean' ? withDefaults.guilloche : null,
+    moire: typeof withDefaults.moire === 'boolean' ? withDefaults.moire : null,
   }
 }
 

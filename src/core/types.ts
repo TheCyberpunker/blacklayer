@@ -67,6 +67,13 @@ export interface WatermarkOptions {
      * readable. Not a claim of authenticity.
      */
     guilloche: boolean
+    /**
+     * Moiré interference overlay — two fine line grids at slightly different
+     * angles that visually beat against each other. Historically used in
+     * anti-copy printing because photocopying the pattern distorts the
+     * interference in a distinctive way.
+     */
+    moire: boolean
   }
 }
 
@@ -77,13 +84,14 @@ export interface ProtectionProfile {
 }
 
 const BASE_COLOR = { r: 0.1, g: 0.1, b: 0.1 }
-const NO_PATTERNS = { crosshatch: false, frame: false, iridescent: false, guilloche: false }
+const NO_PATTERNS = { crosshatch: false, frame: false, iridescent: false, guilloche: false, moire: false }
 
 export interface ProfileOverrides {
   crosshatch?: boolean
   frame?: boolean
   iridescent?: boolean
   guilloche?: boolean
+  moire?: boolean
   opacity?: number
   rotationDeg?: number
   fontSize?: number
@@ -111,6 +119,7 @@ export function profileFor(
         frame: overrides.frame ?? base.watermark.patterns.frame,
         iridescent: overrides.iridescent ?? base.watermark.patterns.iridescent,
         guilloche: overrides.guilloche ?? base.watermark.patterns.guilloche,
+        moire: overrides.moire ?? base.watermark.patterns.moire,
       },
     },
   }
@@ -168,7 +177,7 @@ function baseProfile(level: ProtectionLevel, text: WatermarkText): ProtectionPro
           color: BASE_COLOR,
           seed: 0,
           jitter: 0,
-          patterns: { crosshatch: true, frame: true, iridescent: false, guilloche: false },
+          patterns: { crosshatch: true, frame: true, iridescent: false, guilloche: false, moire: false },
         },
         metadata: 'neutralize',
       }
